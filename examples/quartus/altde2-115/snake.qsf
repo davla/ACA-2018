@@ -1,0 +1,100 @@
+# -------------------------------------------------------------------------- #
+#
+# Copyright (C) 1991-2010 Altera Corporation
+# Your use of Altera Corporation's design tools, logic functions 
+# and other software and tools, and its AMPP partner logic 
+# functions, and any output files from any of the foregoing 
+# (including device programming or simulation files), and any 
+# associated documentation or information are expressly subject 
+# to the terms and conditions of the Altera Program License 
+# Subscription Agreement, Altera MegaCore Function License 
+# Agreement, or other applicable license agreement, including, 
+# without limitation, that your use is for the sole purpose of 
+# programming logic devices manufactured by Altera and sold by 
+# Altera or its authorized distributors.  Please refer to the 
+# applicable agreement for further details.
+#
+# -------------------------------------------------------------------------- #
+#
+# 2) Altera recommends that you do not modify this file. This
+#    file is updated automatically by the Quartus II software
+#    and any changes you make may be lost or overwritten.
+#
+# -------------------------------------------------------------------------- #
+
+
+
+set_global_assignment -name FAMILY "Cyclone IV E"
+set_global_assignment -name DEVICE EP4CE115F29C7
+
+set_global_assignment -name TOP_LEVEL_ENTITY SnakeTop
+
+set_global_assignment -name VERILOG_MACRO "SYNTHESIS=<None>"
+
+set_global_assignment -name USE_CONFIGURATION_DEVICE OFF
+set_global_assignment -name STRATIX_DEVICE_IO_STANDARD "3.3-V LVCMOS"
+
+
+set_location_assignment PIN_Y2 -to clk
+
+set_global_assignment -name LAST_QUARTUS_VERSION "17.1.0 Lite Edition"
+set_global_assignment -name RESERVE_ALL_UNUSED_PINS "AS INPUT TRI-STATED WITH WEAK PULL-UP"
+
+
+
+set_global_assignment -name MIN_CORE_JUNCTION_TEMP 0
+set_global_assignment -name MAX_CORE_JUNCTION_TEMP 85
+set_global_assignment -name POWER_PRESET_COOLING_SOLUTION "23 MM HEAT SINK WITH 200 LFPM AIRFLOW"
+set_global_assignment -name POWER_BOARD_THERMAL_MODEL "NONE (CONSERVATIVE)"
+set_global_assignment -name PARTITION_NETLIST_TYPE SOURCE -entity AluTop -section_id Top
+set_global_assignment -name PARTITION_FITTER_PRESERVATION_LEVEL PLACEMENT_AND_ROUTING -entity AluTop -section_id Top
+set_global_assignment -name PARTITION_COLOR 16764057 -entity AluTop -section_id Top
+set_location_assignment PIN_G12 -to iUartPins_rxd
+set_location_assignment PIN_G9 -to oUartPins_txd
+set_location_assignment PIN_G19 -to io_led[0]
+set_location_assignment PIN_F19 -to io_led[1]
+set_location_assignment PIN_E19 -to io_led[2]
+set_location_assignment PIN_F21 -to io_led[3]
+set_location_assignment PIN_F18 -to io_led[4]
+set_location_assignment PIN_E18 -to io_led[5]
+set_location_assignment PIN_J19 -to io_led[6]
+set_location_assignment PIN_H19 -to io_led[7]
+set_location_assignment PIN_J17 -to io_led[8]
+set_location_assignment PIN_G17 -to io_led[9]
+set_location_assignment PIN_AB28 -to io_sw[0]
+set_location_assignment PIN_AC28 -to io_sw[1]
+set_location_assignment PIN_AC27 -to io_sw[2]
+set_location_assignment PIN_AD27 -to io_sw[3]
+set_location_assignment PIN_AB27 -to io_sw[4]
+set_location_assignment PIN_AC26 -to io_sw[5]
+set_location_assignment PIN_AD26 -to io_sw[6]
+set_location_assignment PIN_AB26 -to io_sw[7]
+set_location_assignment PIN_AC25 -to io_sw[8]
+set_location_assignment PIN_AB25 -to io_sw[9]
+set_location_assignment PIN_Y23 -to reset
+set_instance_assignment -name PARTITION_HIERARCHY root_partition -to | -entity AluTop -section_id Top
+set_global_assignment -name PARTITION_NETLIST_TYPE SOURCE -section_id Top
+set_global_assignment -name PARTITION_FITTER_PRESERVATION_LEVEL PLACEMENT_AND_ROUTING -section_id Top
+set_global_assignment -name PARTITION_COLOR 16764057 -section_id Top
+set_global_assignment -name VERILOG_FILE ../../generated/SnakeTop.v
+set_global_assignment -name PARTITION_NETLIST_TYPE SOURCE -entity hello_top -section_id Top
+set_global_assignment -name PARTITION_FITTER_PRESERVATION_LEVEL PLACEMENT_AND_ROUTING -entity hello_top -section_id Top
+set_global_assignment -name PARTITION_COLOR 16764057 -entity hello_top -section_id Top
+set_instance_assignment -name PARTITION_HIERARCHY root_partition -to | -entity hello_top -section_id Top
+set_location_assignment PIN_E21 -to io_gled
+set_location_assignment PIN_J15 -to io_led[10]
+set_location_assignment PIN_H16 -to io_led[11]
+set_location_assignment PIN_J16 -to io_led[12]
+set_location_assignment PIN_H17 -to io_led[13]
+set_location_assignment PIN_F15 -to io_led[14]
+set_location_assignment PIN_G15 -to io_led[15]
+set_location_assignment PIN_G16 -to io_led[16]
+set_location_assignment PIN_H15 -to io_led[17]
+set_location_assignment PIN_AC24 -to io_sw[10]
+set_location_assignment PIN_AB24 -to io_sw[11]
+set_location_assignment PIN_AB23 -to io_sw[12]
+set_location_assignment PIN_AA24 -to io_sw[13]
+set_location_assignment PIN_AA23 -to io_sw[14]
+set_location_assignment PIN_AA22 -to io_sw[15]
+set_location_assignment PIN_Y24 -to io_sw[16]
+set_instance_assignment -name PARTITION_HIERARCHY root_partition -to | -section_id Top
