@@ -1,10 +1,10 @@
 /*
  * This code is a minimal hardware described in Chisel.
- * 
+ *
  * Copyright: 2013, Technical University of Denmark, DTU Compute
  * Author: Martin Schoeberl (martin@jopdesign.com)
  * License: Simplified BSD License
- * 
+ *
  * Blinking LED: the FPGA version of Hello World
  */
 
@@ -18,8 +18,8 @@ class Hello extends Module {
   val io = new Bundle {
     val led = UInt(OUTPUT, 1)
   }
-  val CNT_MAX = UInt(50000000 / 2 - 1);
-  
+  val CNT_MAX = UInt(5000000 / 2 - 1);
+
   val cntReg = Reg(init = UInt(0, 32))
   val blkReg = Reg(init = UInt(0, 1))
 

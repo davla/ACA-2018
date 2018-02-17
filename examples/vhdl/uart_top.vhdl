@@ -12,7 +12,8 @@ port (
     clk : in std_logic;
 --    reset : in std_logic;
     rxd : in std_logic;
-    txd : out std_logic
+    txd : out std_logic;
+    led : out std_logic_vector (9 downto 0)
 );
 end uart_top;
 
@@ -22,7 +23,8 @@ component UartMain is
 port (clk : std_logic;
       reset : in std_logic;
       io_rxd : in std_logic;
-      io_txd : out std_logic);
+      io_txd : out std_logic;
+      io_led : out std_logic_vector (9 downto 0));
 end component;
 
    signal reset : std_logic;
@@ -49,11 +51,11 @@ begin
          res_reg2 <= res_reg1;
          int_res  <= res_reg2;
       end if;
-   end process;    
+   end process;
 
    reset <= int_res;
 
-    u: UartMain port map(clk, reset, rxd, txd);
+    u: UartMain port map(clk, reset, rxd, txd, led);
 
 --    txd <= rxd;
 

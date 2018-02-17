@@ -2,9 +2,9 @@
  * Copyright: 2014-2018, Technical University of Denmark, DTU Compute
  * Author: Martin Schoeberl (martin@jopdesign.com)
  * License: Simplified BSD License
- * 
+ *
  * A UART is a serial port, also called an RS232 interface.
- * 
+ *
  */
 
 package uart
@@ -165,6 +165,7 @@ class BufferedTx(frequency: Int, baudRate: Int) extends Module {
 class Sender(frequency: Int, baudRate: Int) extends Module {
   val io = new Bundle {
     val txd = Bits(OUTPUT, 1)
+    val led = Bits(OUTPUT, 1)
   }
 
   val tx = Module(new BufferedTx(frequency, baudRate))
@@ -172,17 +173,28 @@ class Sender(frequency: Int, baudRate: Int) extends Module {
   io.txd := tx.io.txd
 
   // This is not super elegant
-  val hello = Array[Bits](Bits('H'), Bits('e'), Bits('l'), Bits('l'), Bits('o'))
+  // val hello = Array.fill(5)(Bits('1'))
+  val hello = Array.tabulate[Bits](10)(n => Bits(if (n % 2 == 0) '0' else '1'))
+    .flatMap(b => Array.fill(100)(b))
+  // val hello = Array.tabulate[Bits](10)(n => Bits((n % 2).toChar)
+  // val hello = Array[Bits](Bits('H'), Bits('e'), Bits('l'), Bits('l'), Bits('o'))
   val text = Vec[Bits](hello)
 
-  val cntReg = Reg(init = UInt(0, 3))
+  val cntReg = Reg(init = UInt(0, log2Up(hello.length)))
+  val ledOut = Reg(init = UInt(0, 1))
 
   tx.io.channel.data := text(cntReg)
-  tx.io.channel.valid := cntReg =/= UInt(5)
+  tx.io.channel.valid := cntReg =/= UInt(hello.length)
+  io.led := ledOut
 
-  when(tx.io.channel.ready && cntReg =/= UInt(5)) {
-    cntReg := cntReg + UInt(1)
-  }
+  when(tx.io.channel.ready && cntReg =/= UInt(hello.length)) {
+        cntReg := cntReg + UInt(1)
+        when (text(cntReg) === Bits('0')) {
+            ledOut := UInt(0, 1)
+        } otherwise {
+            ledOut := UInt(1, 1)
+        }
+    }
 }
 
 class Echo(frequency: Int, baudRate: Int) extends Module {
@@ -204,11 +216,13 @@ class UartMain(frequency: Int, baudRate: Int) extends Module {
   val io = new Bundle {
     val rxd = Bits(INPUT, 1)
     val txd = Bits(OUTPUT, 1)
+    val led = Bits(OUTPUT, 10)
   }
-  
-  val u = Module(new Sender(50000000, 115200))
+
+  val u = Module(new Sender(frequency, baudRate))
   // val u = Module(new Echo(50000000, 115200))
   io.txd := u.io.txd
+  io.led := Cat(Bits(0, 9), u.io.led)
   // u.io.rxd := io.rxd
 }
 
@@ -218,4 +232,3 @@ object UartMain {
       () => Module(new UartMain(50000000, 115200)))
   }
 }
-
