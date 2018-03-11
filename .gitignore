@@ -30,8 +30,13 @@ project/boot/
 .history
 .cache
 
+# Chisel
+
+[A-Z]*.v
+
 # Quartus
 
-quartus/**/.qpf
+**/quartus/**/*.*
+**/quartus/**/README
 !*.qpf
 !*.qsf

@@ -2,9 +2,9 @@
  * Copyright: 2014-2018, Technical University of Denmark, DTU Compute
  * Author: Martin Schoeberl (martin@jopdesign.com)
  * License: Simplified BSD License
- * 
+ *
  * A UART is a serial port, also called an RS232 interface.
- * 
+ *
  */
 
 package uart
@@ -121,24 +121,24 @@ class Rx(frequency: Int, baudRate: Int) extends Module {
 class Buffer extends Module {
   val io = new Bundle {
     val in = new Channel()	//#declare in assigned with new channel obj
-    val out = new Channel().flip //#declare out assigned with new channel obj fliped 
+    val out = new Channel().flip //#declare out assigned with new channel obj fliped
   }
 
   val empty :: full :: Nil = Enum(UInt(), 2) //# declare states
   val stateReg = Reg(init = empty)			 //# declare state register and initialize to empty
-  val dataReg = Reg(init = Bits(0, 8))		 //# declare data register 
+  val dataReg = Reg(init = Bits(0, 8))		 //# declare data register
 
-  io.in.ready := stateReg === empty			 //# assign io.in.ready with true when stateReg === empty, tell buffered transmitter data is ready 
+  io.in.ready := stateReg === empty			 //# assign io.in.ready with true when stateReg === empty, tell buffered transmitter data is ready
   io.out.valid := stateReg === full			 //# assign io.out.valid with true when stateReg === full, tell transmitter to shift data
 
   when(stateReg === empty) {				 //# when state is empty
-    when(io.in.valid) {						 //# if io.in.valid is true then 
+    when(io.in.valid) {						 //# if io.in.valid is true then
       dataReg := io.in.data					 //# assign input data to dataReg
       stateReg := full						 //# next state is changed to full
     }
   }.otherwise { // full, io.out.valid := true //# when state is not empty
     when(io.out.ready) {					  //# if io.out.ready is true then
-      stateReg := empty						  //# next state is change to empty 
+      stateReg := empty						  //# next state is change to empty
     }
   }
   io.out.data := dataReg					  //# output io.out.data is assigned by dataReg
@@ -150,7 +150,7 @@ class Buffer extends Module {
 //# BufferedTx class - component
 class BufferedTx(frequency: Int, baudRate: Int) extends Module {
   val io = new Bundle {
-    val txd = Bits(OUTPUT, 1)	//#declare transmitt data txd as output 
+    val txd = Bits(OUTPUT, 1)	//#declare transmitt data txd as output
     val channel = new Channel() //#assign new Channel obj to channel
   }
   val tx = Module(new Tx(frequency, baudRate)) //#declare tx assign with new Tx obj
@@ -186,10 +186,10 @@ class Sender1(frequency: Int, baudRate: Int) extends Module {
 
 //  when(tx.io.channel.ready && cntReg =/= UInt(5)) {
 //    cntReg := cntReg + UInt(1)
-//  }					
+//  }
   val cmdReg = Reg(init = UInt(0, 8))
   val validReg = Reg(init = UInt(0, 1))
-  tx.io.channel.data := cmdReg		
+  tx.io.channel.data := cmdReg
   tx.io.channel.valid := validReg =/= UInt(1)
   val cntReg = Reg(init = UInt(frequency / 2 - 1, 32))
   val blkReg = Reg(init = UInt(0, 1))
@@ -202,8 +202,8 @@ class Sender1(frequency: Int, baudRate: Int) extends Module {
 //    }.elsewhen(blkReg === UInt(1)){
 //	  cmdReg := UInt("h31")
 //    }
-//	when(tx.io.channel.ready) { 
-//      validReg := UInt(1)	
+//	when(tx.io.channel.ready) {
+//      validReg := UInt(1)
 //    }
 //  }
   when(cntReg =/= UInt(0)) {
@@ -217,8 +217,8 @@ class Sender1(frequency: Int, baudRate: Int) extends Module {
     }.elsewhen(blkReg === UInt(1)){
 	  cmdReg := UInt("h31")
     }
-	when(tx.io.channel.ready) { 
-      validReg := UInt(0)	
+	when(tx.io.channel.ready) {
+      validReg := UInt(0)
     }
   }
   io.led := blkReg
@@ -257,7 +257,7 @@ class Led(frequency: Int) extends Module {
     val led = UInt(OUTPUT, 1)
   }
   val CNT_MAX = UInt(frequency / 2 - 1);
-  
+
   val cntReg = Reg(init = UInt(0, 32))
   val blkReg = Reg(init = UInt(0, 1))
 
@@ -280,7 +280,7 @@ class Echo(frequency: Int, baudRate: Int) extends Module {
   io.txd := tx.io.txd
   rx.io.rxd := io.rxd
   tx.io.channel <> rx.io.channel
-  tx.io.channel.valid := Bool(true)	
+  tx.io.channel.valid := Bool(true)
 //  tx.io.channel.data := Bits('H')
 }
 //# UartMain class - component
@@ -291,7 +291,8 @@ class UartMain(frequency: Int, baudRate: Int) extends Module {
 	val ledG = Bits(OUTPUT, 1)
     val ledR = Bits(OUTPUT, 1)
   }
-  
+
+  // val u = Module(new Sender1(50000000, 115200))	//# assign u with new Sender obj with argument
   val u = Module(new Sender2(50000000, 115200))	//# assign u with new Sender obj with argument
   // val u = Module(new Echo(50000000, 115200))
   io.txd := u.io.txd							//# assign UartMain component io.txd with sender io txd, bypassing txd from sender
@@ -307,4 +308,3 @@ object UartMain {
       () => Module(new UartMain(50000000, 115200))) //#pass argument to new object UartMain
   }
 }
-

@@ -2,83 +2,97 @@ package simple
 
 import Chisel._
 
-object Util {
-    sealed trait Direction
-    case object Left extends Direction
-    case object Right extends Direction
+class Snake (
+        length :Int,
+        blankCount :Int,
+        multLength :Int,
+        stillClocks :Int
+) extends Module {
 
-    def rotate(bits :Bits, shift :Int, direction :Direction) = {
-        direction match {
-            case Left => {
-                val lastVictim = bits.getWidth - 1
-                val firstVictim = lastVictim - shift + 1
-
-                val victims = bits(lastVictim, firstVictim)
-                val shifted = UInt(bits) << UInt(shift)
-                Cat(shifted(firstVictim, shift), victims)
-            }
-
-            case Right => {
-                val victims = bits(shift - 1, 0)
-                Cat(victims, UInt(bits) >> UInt(shift))
-            }
-        }
-    }
-
-    val rotateLeft = (rotate _) (_ :UInt, _ :Int, Left)
-    val rotateRight = (rotate _) (_ :UInt, _ :Int, Right)
-}
-
-class Snake(length :Int, blankCount :Int, stillClocks :Int) extends Module {
+    import DE2115._
     import Util._
 
     val TOT_LENGTH = length + blankCount
+    val MULT_DEC_LENGTH = decLength (multLength) * 7
 
     val io = new Bundle {
+        val decDigit = Bits(OUTPUT, MULT_DEC_LENGTH)
         val direction = Bool(INPUT)
-        val speedMultiplier = UInt(INPUT, 16)
         val out = UInt(OUTPUT, TOT_LENGTH)
+        val speedMultiplier = UInt(INPUT, multLength)
+        val stop = Bool(INPUT)
     }
 
     val snake = Reg(init = Cat(Fill(blankCount, Bits(0)),
         Fill(length, Bits(1))))
     val stillCount = Reg(init = UInt(0))
 
-    io.out <> snake
+    val bin2Dec = BinTo7Seg (multLength)
 
-    when (stillCount === UInt(0)) {
-        when (io.speedMultiplier =/= UInt(0)) {
-            stillCount := UInt(stillClocks) / io.speedMultiplier
+    io.out := snake
 
-            when (io.direction) {
-                snake := rotateLeft (snake, 1)
-            } otherwise {
-                snake := rotateRight (snake, 1)
-            }
+    bin2Dec.io.bin := io.speedMultiplier
+    io.decDigit := bin2Dec.io.dec
+
+    when (io.stop || io.speedMultiplier === UInt(0)) {
+        stillCount === UInt(0)
+
+    }.elsewhen (stillCount === UInt(0)) {
+        stillCount := UInt(stillClocks) / io.speedMultiplier
+
+        when (io.direction) {
+            snake := rotateLeft (snake, 1)
+        } otherwise {
+            snake := rotateRight (snake, 1)
         }
-    } otherwise {
+
+    }.otherwise {
         stillCount := stillCount - UInt(1)
     }
 }
 
-class SnakeTop(
+object Snake {
+    def apply(
+            length :Int,
+            blankCount :Int,
+            multLength :Int,
+            stillClocks :Int
+    ) =
+        Module (new Snake (length, blankCount, multLength, stillClocks))
+}
+
+class SnakeTop (
         length :Int = 10,
         availableLeds :Int = 18,
+        availableSwitches :Int = 17,
         stillClocks :Int = 500000000 - 1
 ) extends Module {
 
+    import Util._
+
     val BLANK_LEDS_COUNT = availableLeds - length
+    val SPEED_MULT_LENGTH = 10
+    val DEC_DIGITS_LENGTH = decLength (SPEED_MULT_LENGTH) * 7
 
     val io = new Bundle {
-      val led = UInt(OUTPUT, availableLeds)
-      val sw = UInt(INPUT, 17)
+        val btn = UInt(INPUT, 1)
+        val led = UInt(OUTPUT, availableLeds)
+        val sw = UInt(INPUT, availableSwitches)
+        val dec = UInt(OUTPUT, DEC_DIGITS_LENGTH)
     }
 
-    val snake = Module(new Snake(length, BLANK_LEDS_COUNT, stillClocks))
+    val snake = Snake(
+            length,
+            BLANK_LEDS_COUNT,
+            SPEED_MULT_LENGTH,
+            stillClocks
+        )
 
-    io.led <> snake.io.out
-    io.sw(15, 0) <> snake.io.speedMultiplier
-    snake.io.direction := io.sw(16)
+    io.dec := snake.io.decDigit
+    io.led := snake.io.out
+    snake.io.direction := io.sw (availableSwitches - 1)
+    snake.io.speedMultiplier := io.sw (SPEED_MULT_LENGTH - 1, 0)
+    snake.io.stop := ~io.btn
 }
 
 object SnakeMain {
