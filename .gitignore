@@ -44,3 +44,4 @@ project/boot/
 **/quartus/**/README
 !*.qpf
 !*.qsf
+!*.sdc
