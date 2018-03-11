@@ -9,6 +9,10 @@
 	<IO DevTypeRef="Uart" offset="8"/>
 	<IO DevTypeRef="Leds" offset="9"/>
 	<IO DevTypeRef="Keys" offset="10" intrs="2,3,4,5"/>
+
+    <!-- Exercises -->
+    <IO DevTypeRef="MyCounter" offset="11"/>
+
   </IOs>
 
   <Devs>
@@ -35,5 +39,8 @@
 		<param name="sramDataWidth" value="16" />
 	    </params>
 	</Dev>
+
+    <!-- Exercises -->
+    <Dev DevType="MyCounter" entity="Counter" iface="OcpCore"/>
   </Devs>
 </patmos>
