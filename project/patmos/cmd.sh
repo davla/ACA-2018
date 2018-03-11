@@ -17,6 +17,7 @@ function burn-rom {
 
 CMD="$1"
 
+make tools
 case "${CMD,,}" in
 
     # Burns the bootloader to the ROM

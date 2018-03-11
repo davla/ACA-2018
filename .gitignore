@@ -30,6 +30,10 @@ project/boot/
 .history
 .cache
 
+# Patmos
+
+/project/local/
+
 # Chisel
 
 [A-Z]*.v
