@@ -3,6 +3,7 @@
 # Wrapper script around patmos makefiles, since we always forget
 # the exact command.
 # Arguments:
+#   -c: Flag. Disabled the build of the emulator.
 #   $1: The action to be performed
 #   $2: The program to be loaded
 
@@ -15,24 +16,41 @@ function burn-rom {
     make BOOTAPP=bootable-"$PROGRAM" gen synth config
 }
 
+COMPILE_ONLY='false'
+while getopts 'c' OPTION; do
+    case "$OPTION" in
+        'c')
+            COMPILE_ONLY='true'
+            ;;
+    esac
+done
+shift $(( OPTIND - 1 ))
+
 CMD="$1"
 
 make tools
 case "${CMD,,}" in
 
-    # Burns the bootloader to the ROM
     'bootloader'|'bl')
         burn-rom 'bootloader'
         ;;
 
-    # Burns a program to the ROM
     'burn-rom'|'br')
         burn-rom "$2"
         ;;
 
-    # Compiles a program and writes in into the FPGA memory
+    'emulate'|'emu')
+        PROGRAM="$2"
+        EXEC=$(basename "$PROGRAM" .c)
+
+        [[ "$COMPILE_ONLY" == 'false' ]] && make emulator
+        patmos-clang "$PROGRAM" -o "$EXEC"
+        patemu "$EXEC"
+        ;;
+
     'program'|'app')
         PROGRAM="$2"
+
         make APP="$PROGRAM" comp config download
         ;;
 esac
