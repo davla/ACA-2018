@@ -15,7 +15,7 @@ import ocp._
 /**
 
  Local arbitration with the TDM counter and a tiny FSM.
- 
+
    * Tree to the memory is node local enabled AND and an OR for merge
    * Three state FSM: idle, read, write
    * loose one cycle by registering the command and switching state
@@ -42,7 +42,7 @@ class NodeSPM(id: Int, nrCores: Int) extends Module {
 
   cnt := Mux(cnt === UInt(nrCores - 1), UInt(0), cnt + UInt(1))
   val enable = cnt === UInt(id)
-  
+
   // this is not super nice to define the type this way
   val dvaRepl = UInt(width = 2)
   dvaRepl := OcpResp.NULL
@@ -68,7 +68,7 @@ class NodeSPM(id: Int, nrCores: Int) extends Module {
       dvaRepl := OcpResp.DVA
     }
   }
-  
+
   // Data comes from the SPM, response from the FSM
   io.fromCore.S.Resp := RegNext(dvaRepl)
   io.fromCore.S.Data := io.toMem.S.Data
@@ -104,4 +104,3 @@ class SharedSPM(nrCores: Int, size: Int) extends Module {
   spm.io.M.Cmd := nd.map(_.io.toMem.M.Cmd).reduce((x, y) => x | y)
   spm.io.M.ByteEn := nd.map(_.io.toMem.M.ByteEn).reduce((x, y) => x | y)
 }
-
