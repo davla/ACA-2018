@@ -1,6 +1,6 @@
 /*
  * Test the shared SPM, should become some generic tester for OCP devices.
- * 
+ *
  * Author: Martin Schoeberl (martin@jopdesign.com)
  */
 
@@ -38,7 +38,7 @@ class SharedSPMTester(dut: SharedSPM) extends Tester(dut) {
       step(1)
     }
   }
-  
+
 
   for (i <- 0 until 32) {
     write(0, i, i * 0x100 + 0xa)

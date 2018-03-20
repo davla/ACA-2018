@@ -27,8 +27,8 @@ class ConcurrentSPM (
     // Check for other exceptions
 
     val io = Vec(nrCores, new OcpCoreSlavePort(ADDR_WIDTH, DATA_WIDTH))
-    val nd = createArbiters (nrCores)
     val spm = Module(new Spm(size))
+    val nd = createArbiters (nrCores)
     wireSPM (spm)
 
     val statusBits = Bits (0, width=(size / granularity))
