@@ -1,12 +1,16 @@
 #!/usr/bin/env bash
 
-sudo apt-get install xdotool texlive latexmk
+BUILD_DIR='build'
+
+sudo apt-get install xdotool texlive latexmk python-pygments texlive-latex-extra
 apm install pdf-view language-latex latex
 
-echo -n '"pdf-view":
+mkdir -p "$BUILD_DIR"
+
+echo -n "\"pdf-view\":
   fitToWidthOnOpen: true
 latex:
   buildOnSave: true
-  opener: "pdf-view"
-  outputDirectory: "build"
-' >> $HOME/.atom/config.cson
+  opener: \"pdf-view\"
+  outputDirectory: '$BUILD_DIR'
+" >> $HOME/.atom/config.cson

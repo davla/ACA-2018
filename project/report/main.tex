@@ -1,5 +1,101 @@
-\documentclass[10pt,twocolumn,twoside,a4paper]{article}
+\documentclass{article}
+%Text
+\usepackage[utf8]{inputenc}
+\usepackage{subfiles}
+\usepackage{enumitem}
+%\usepackage[document]{ragged2e}
+
+%Figure
+\usepackage{graphicx}
+\usepackage{placeins}
+\usepackage{subcaption}
+\graphicspath{{Introduction/}}
+
+%Table
+\usepackage{array}
+\newcolumntype{P}[1]{>{\centering\arraybackslash}p{#1}}
+\usepackage{tabularx, blkarray}
+\usepackage{multirow,bigdelim}
+
+%Color
+\usepackage{color}
+
+%Equation
+\usepackage{amsmath}
+
+%CODE LIST
+\usepackage{minted}
+
+%hypper link
+%\usepackage{hyperref}
+\usepackage[hidelinks]{hyperref}
+\usepackage{hyperref}
+
+\usepackage{listings}
+
 
 \begin{document}
-    aaaa jjjjj hhhh
+
+\begin{titlepage}
+
+\begin{figure}[ht]
+\centering
+\includegraphics[scale=0.15]{DTUlogo.png}
+\end{figure}
+
+\vspace*{\baselineskip}
+\centering
+\textsc{\LARGE Technical University of Denmark}\\[0.5cm]
+\centering
+\textsc{\large  Department of Applied Mathematics and Computer Science}\\[0.5cm]
+
+\rule{\textwidth}{1.6pt}\vspace*{-\baselineskip}\vspace*{2pt} % Thick horizontal line
+\rule{\textwidth}{0.4pt}\\[\baselineskip] % Thin horizontal line
+{ \huge \bfseries Hardware support for patmos}\\[0.4cm] % Title of your document
+\vspace{0.5cm}
+{ \Large \bfseries 02211 - Advanced Computer Architecture }\\[0.5cm]
+    %\\[0.2in]
+\rule{\textwidth}{0.4pt}\vspace*{-\baselineskip}\vspace{3.2pt} % Thin horizontal line
+\rule{\textwidth}{1.6pt}\\[2\baselineskip] % Thick horizontal line
+
+\vspace{1.0cm}
+\textsc{\Large Davide \vspace*{1pt} - s\\[0.05in]}
+\textsc{\Large Robert \vspace*{1pt} - s\\[0.05in]}
+\textsc{\Large Wenhao Li \vspace*{1pt} - s\\[0.05in]}
+\vspace{1cm}
+%\textsc{\Large Date 2017\\[0.05in]}
+%\DTMlangsetup{showdayofmonth=false}
+\textsc{\Large \today\\[0.05in]}
+
+\end{titlepage}
+%\clearpage
+\newpage
+\tableofcontents
+\clearpage
+
+\newpage
+\section{Introduction}
+
+\subfile{Introduction/Introduction}
+
+\bibliography{report}
+\begin{thebibliography}{1}
+
+\bibitem{Mye99}
+    Andrew C. Myers,
+    Mostly-Static Decentralized Information Flow Control
+
+\bibitem{ML97}
+    Andrew C. Myers, Barbara Liskov,
+	A Decentralized Model for Information Flow Control
+
+\bibitem{Den76}
+    Dorothy E. Denning and Peter J. Denning,
+	Certification of Programs for Secure Information Flow
+
+\bibitem{BL75}
+    Do E. Bell and Lo J. La Padula
+	SECURE COMPUTER SYSTEM: UNIFIED EXPOSITION AND MULTICS INTERPRETATION
+\end{thebibliography}
+
 \end{document}
