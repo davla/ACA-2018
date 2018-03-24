@@ -9,5 +9,3 @@ scalacOptions ++= Seq("-unchecked", "-deprecation", "-feature", "-language:refle
 libraryDependencies += scalaVersion("org.scala-lang" % "scala-compiler" % _).value
 
 libraryDependencies += "edu.berkeley.cs" %% "chisel" % "2.2.38"
-
-libraryDependencies += "org.scalatest" %% "scalatest" % "3.0.5" % "test"
