@@ -69,13 +69,16 @@ class LLSCSpm(
 
     val masterReg = RegInit(io.slave.M)
     masterReg := io.slave.M
+    val slaveDataReg = RegInit(io.slave.S.Data)
+    val lastCommand = RegInit(io.slave.M.Cmd)
+    lastCommand := io.slave.M.Cmd
 
     spm.io.M := masterReg
-    io.slave.S.Data := spm.io.S.Data
+    io.slave.S.Data := Mux(lastCommand === OcpCmd.WR, slaveDataReg, spm.io.S.Data)
     io.slave.S.Resp := spm.io.S.Resp
 
     val currDirtyBits = getDirtyBits(io.slave.M.Addr)
-    io.db := io.slave.M.Addr
+    io.db := io.slave.M.Cmd === OcpCmd.WR
 
     switch (io.slave.M.Cmd) {
         is (OcpCmd.RD) {
@@ -83,13 +86,15 @@ class LLSCSpm(
         }
 
         is (OcpCmd.WR) {
+            io.slave.S.Resp := OcpResp.DVA
+
             when (DirtyBits.get(currDirtyBits, io.core) === DirtyBits.PRISTINE) {
                 currDirtyBits := DirtyBits.makeDirty(currDirtyBits)
-                io.slave.S.Data := Bits(0)
+                slaveDataReg := Bits(0)
 
             }.otherwise {
                 masterReg.Cmd := OcpCmd.IDLE
-                io.slave.S.Data := Bits(1)
+                slaveDataReg := Bits(1)
             }
         }
     }
@@ -107,6 +112,7 @@ object LLSCSpm {
 }
 
 class LLSCSpmTester(dut: LLSCSpm) extends Tester(dut) {
+    import LLSCSpmTester._
 
   println("LL/SC SPM Tester")
 
@@ -114,9 +120,9 @@ class LLSCSpmTester(dut: LLSCSpm) extends Tester(dut) {
     poke(dut.io.slave.M.Addr, addr)
     poke(dut.io.slave.M.Cmd, 2) // OcpCmd.RD
     step(1)
+    peek(dut.io.db)
     poke(dut.io.slave.M.Cmd, 0) // OcpCmd.IDLE
     while (peek(dut.io.slave.S.Resp) != 1) {
-        peek(dut.io.db)
       step(1)
     }
     peek(dut.io.slave.S.Data)
@@ -129,38 +135,50 @@ class LLSCSpmTester(dut: LLSCSpm) extends Tester(dut) {
     poke(dut.io.slave.M.Cmd, 1) // OcpCmd.WR
     poke(dut.io.slave.M.ByteEn, 0x0f)
     step(1)
+    peek(dut.io.db)
     poke(dut.io.slave.M.Cmd, 0) // OcpCmd.IDLE
     while (peek(dut.io.slave.S.Resp) != 1) {
-        peek(dut.io.db)
       step(1)
     }
+    peek(dut.io.slave.S.Data)
+    dut.io.slave.S.Data
   }
 
-  poke(dut.io.core, 1)
+  poke(dut.io.core, 0)
 
-  write(0, 0 * 0x100 + 0xa)
-  // write(8, 1 * 0x100 + 0xa)
-  // write(16, 1 * 0x100 + 0xa)
-  write(32, 2 * 0x100 + 0xa)
-  // write(48, 3 * 0x100 + 0xa)
-  write(64, 3 * 0x100 + 0xa)
+  // Basic read-write test
 
-  // for (i <- 0 until(1024, 64)) {
-  //   write(i, i * 0x100 + 0xa)
-  //   // write(1, i+32, i * 0x10000 + 0xb)
-  // }
-  // step(1)
-  // for (i <- 0 until 1) {
-  //   expect(read(i * 64), i * 0x100 + 0xa)
-  //   // expect(read(1, i+32), i * 0x10000 + 0xb)
-  // }
+  for (i <- 0.until(1024, GRANULARITY)) {
+    expect(write(i, i * 0x100 + 0xa), 0)
+  }
+  step(1)
+  for (i <- 0.until(1024, GRANULARITY)) {
+    expect(read(i), i * 0x100 + 0xa)
+  }
+
+  // LL/SC tests
+
+  poke(dut.io.core, 0)
+
+  // Write to the same memory location
+  // without reading in between should fail
+  expect(write(0, 0xFF), 0)
+  // expect(write(0, 0xF0), 1)
+
+  // Failed writes should not affect memory
+  // expect(read(0), 0xFF)
+
+
+
 }
 
 object LLSCSpmTester {
+    val GRANULARITY = 32
+
   def main(args: Array[String]): Unit = {
     chiselMainTest(Array("--genHarness", "--test", "--backend", "c",
       "--compile", "--vcd", "--targetDir", "generated"),
-      () => LLSCSpm(32, 4, 1024)) {
+      () => LLSCSpm(GRANULARITY, 4, 1024)) {
         c => new LLSCSpmTester(c)
       }
   }
