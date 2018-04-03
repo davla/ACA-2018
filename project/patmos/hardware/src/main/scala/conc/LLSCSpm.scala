@@ -58,7 +58,7 @@ class LLSCSpm(
     val io = new Bundle() {
         val slave = new OcpCoreSlavePort(ADDR_WIDTH, DATA_WIDTH)
         val core = UInt(INPUT, log2Up(nrCores))
-        val db = Bits(OUTPUT, nrCores)
+        val db = Bits(OUTPUT, 2)
     }
 
     // The actual scratchpad memory
@@ -67,18 +67,19 @@ class LLSCSpm(
     // Dirty bits
     val dirtyBits = Mem(DirtyBits(nrCores), size / granularity)
 
+    // val respCnt =
+
     val masterReg = RegInit(io.slave.M)
     masterReg := io.slave.M
-    val slaveDataReg = RegInit(io.slave.S.Data)
-    val lastCommand = RegInit(io.slave.M.Cmd)
-    lastCommand := io.slave.M.Cmd
+    val slaveReg = RegInit(spm.io.S)
 
     spm.io.M := masterReg
-    io.slave.S.Data := Mux(lastCommand === OcpCmd.WR, slaveDataReg, spm.io.S.Data)
-    io.slave.S.Resp := spm.io.S.Resp
+    io.slave.S <> Mux(slaveReg.Resp === OcpResp.NULL, spm.io.S, slaveReg)
 
     val currDirtyBits = getDirtyBits(io.slave.M.Addr)
-    io.db := io.slave.M.Cmd === OcpCmd.WR
+    io.db := spm.io.S.Resp
+
+    slaveReg.Resp := OcpResp.NULL
 
     switch (io.slave.M.Cmd) {
         is (OcpCmd.RD) {
@@ -86,15 +87,15 @@ class LLSCSpm(
         }
 
         is (OcpCmd.WR) {
-            io.slave.S.Resp := OcpResp.DVA
+            slaveReg.Resp := OcpResp.DVA
 
             when (DirtyBits.get(currDirtyBits, io.core) === DirtyBits.PRISTINE) {
                 currDirtyBits := DirtyBits.makeDirty(currDirtyBits)
-                slaveDataReg := Bits(0)
+                slaveReg.Data := Bits(0)
 
             }.otherwise {
                 masterReg.Cmd := OcpCmd.IDLE
-                slaveDataReg := Bits(1)
+                slaveReg.Data := Bits(1)
             }
         }
     }
