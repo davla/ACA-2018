@@ -161,15 +161,21 @@ class LLSCSpmTester(dut: LLSCSpm) extends Tester(dut) {
 
   poke(dut.io.core, 0)
 
-  // Write to the same memory location
-  // without reading in between should fail
+  // Write to the same memory location without reading in between should fail
   expect(write(0, 0xFF), 0)
-  // expect(write(0, 0xF0), 1)
+  expect(write(0, 0xF0), 1)
 
   // Failed writes should not affect memory
-  // expect(read(0), 0xFF)
+  expect(read(0), 0xFF)
 
+  // Write to the same memory location with a read in between should succeed
+  expect(write(0, 0xFF), 0)
+  expect(read(0), 0xFF)
+  expect(write(0, 0xF0), 0)
 
+  // Write to memory in the same granularity block should fail
+  expect(write(GRANULARITY * 9, 0xFF), 0)
+  expect(write(GRANULARITY * 9 + 1, 0xF0), 1)
 
 }
 
