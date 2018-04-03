@@ -1,0 +1,174 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.0//EN" "http://www.w3.org/TR/2001/PR-SVG-20010719/DTD/svg10.dtd">
+<svg width="59cm" height="85cm" viewBox="553 225 1180 1695" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+  <g id="Background">
+    <rect style="fill: #ffffff; fill-opacity: 1; stroke-opacity: 1; stroke-width: 2; stroke: #000000" x="765.645" y="228" width="148.774" height="153.733" rx="0" ry="0"/>
+    <text font-size="28.2218" style="fill: #000000; fill-opacity: 1; stroke: none;text-anchor:start;font-family:sans-serif;font-style:normal;font-weight:normal" x="813.032" y="314.867">
+      <tspan x="813.032" y="314.867">Core</tspan>
+    </text>
+    <rect style="fill: #ffffff; fill-opacity: 1; stroke-opacity: 1; stroke-width: 2; stroke: #000000" x="1351.65" y="298" width="152.806" height="157.9" rx="0" ry="0"/>
+    <text font-size="28.2218" style="fill: #000000; fill-opacity: 1; stroke: none;text-anchor:start;font-family:sans-serif;font-style:normal;font-weight:normal" x="1394.05" y="388.95">
+      <tspan x="1394.05" y="388.95">Core</tspan>
+      <tspan x="1394.05" y="424.228"></tspan>
+    </text>
+    <rect style="fill: #ffffff; fill-opacity: 1; stroke-opacity: 1; stroke-width: 2; stroke: #000000" x="765.645" y="827" width="141.226" height="145.933" rx="0" ry="0"/>
+    <text font-size="28.2218" style="fill: #000000; fill-opacity: 1; stroke: none;text-anchor:start;font-family:sans-serif;font-style:normal;font-weight:normal" x="771.258" y="910.967">
+      <tspan x="771.258" y="910.967">NodeSPM</tspan>
+    </text>
+    <rect style="fill: #ffffff; fill-opacity: 1; stroke-opacity: 1; stroke-width: 2; stroke: #000000" x="1373.1" y="794.8" width="141.226" height="145.933" rx="0" ry="0"/>
+    <text font-size="28.2218" style="fill: #000000; fill-opacity: 1; stroke: none;text-anchor:start;font-family:sans-serif;font-style:normal;font-weight:normal" x="1376.71" y="878.767">
+      <tspan x="1376.71" y="878.767">NodeSPM</tspan>
+    </text>
+    <rect style="fill: #ffffff; fill-opacity: 1; stroke-opacity: 1; stroke-width: 2; stroke: #000000" x="746.645" y="1159" width="175.919" height="181.783" rx="0" ry="0"/>
+    <text font-size="28.2218" style="fill: #000000; fill-opacity: 1; stroke: none;text-anchor:start;font-family:sans-serif;font-style:normal;font-weight:normal" x="783.605" y="1248.89">
+      <tspan x="783.605" y="1248.89">LL/SC </tspan>
+      <tspan x="783.605" y="1284.17">Adapter</tspan>
+    </text>
+    <rect style="fill: #ffffff; fill-opacity: 1; stroke-opacity: 1; stroke-width: 2; stroke: #000000" x="1367.1" y="1166.8" width="175.919" height="181.783" rx="0" ry="0"/>
+    <text font-size="28.2218" style="fill: #000000; fill-opacity: 1; stroke: none;text-anchor:start;font-family:sans-serif;font-style:normal;font-weight:normal" x="1404.06" y="1256.69">
+      <tspan x="1404.06" y="1256.69">LL/SC </tspan>
+      <tspan x="1404.06" y="1291.97">Adapter</tspan>
+    </text>
+    <rect style="fill: #ffffff; fill-opacity: 1; stroke-opacity: 1; stroke-width: 2; stroke: #000000" x="1054.65" y="1701" width="180.097" height="186.1" rx="0" ry="0"/>
+    <text font-size="28.2218" style="fill: #000000; fill-opacity: 1; stroke: none;text-anchor:start;font-family:sans-serif;font-style:normal;font-weight:normal" x="1113.69" y="1800.05">
+      <tspan x="1113.69" y="1800.05">SPM</tspan>
+    </text>
+    <polygon style="fill: #ffffff; fill-opacity: 1; stroke-opacity: 1; stroke-width: 2; stroke: #000000" fill-rule="evenodd" points="1084.5,1595 1187.5,1595 1239,1534 1033,1534 "/>
+    <g>
+      <rect style="fill: #ffffff; fill-opacity: 1; stroke-opacity: 1; stroke-width: 2; stroke: #000000" x="756" y="380.861" width="168" height="57.2778" rx="0" ry="0"/>
+      <text font-size="28.2218" style="fill: #000000; fill-opacity: 1; stroke: none;text-anchor:middle;font-family:sans-serif;font-style:normal;font-weight:normal" x="840" y="418.061">
+        <tspan x="840" y="418.061"></tspan>
+      </text>
+    </g>
+    <text font-size="28.2218" style="fill: #000000; fill-opacity: 1; stroke: none;text-anchor:start;font-family:sans-serif;font-style:normal;font-weight:normal" x="766" y="418.5">
+      <tspan x="766" y="418.5">OcpMaster</tspan>
+    </text>
+    <g>
+      <rect style="fill: #ffffff; fill-opacity: 1; stroke-opacity: 1; stroke-width: 2; stroke: #000000" x="758" y="777.361" width="154.7" height="57.2778" rx="0" ry="0"/>
+      <text font-size="28.2218" style="fill: #000000; fill-opacity: 1; stroke: none;text-anchor:middle;font-family:sans-serif;font-style:normal;font-weight:normal" x="835.35" y="814.561">
+        <tspan x="835.35" y="814.561">OcpSlave</tspan>
+      </text>
+    </g>
+    <g>
+      <rect style="fill: #ffffff; fill-opacity: 1; stroke-opacity: 1; stroke-width: 2; stroke: #000000" x="757.1" y="561.8" width="154.7" height="57.2778" rx="0" ry="0"/>
+      <text font-size="28.2218" style="fill: #000000; fill-opacity: 1; stroke: none;text-anchor:middle;font-family:sans-serif;font-style:normal;font-weight:normal" x="834.45" y="599">
+        <tspan x="834.45" y="599">OcpSlave</tspan>
+      </text>
+    </g>
+    <rect style="fill: #ffffff; fill-opacity: 1; stroke-opacity: 1; stroke-width: 2; stroke: #000000" x="1353.75" y="244.8" width="148.774" height="153.733" rx="0" ry="0"/>
+    <text font-size="28.2218" style="fill: #000000; fill-opacity: 1; stroke: none;text-anchor:start;font-family:sans-serif;font-style:normal;font-weight:normal" x="1401.13" y="331.667">
+      <tspan x="1401.13" y="331.667">Core</tspan>
+    </text>
+    <g>
+      <rect style="fill: #ffffff; fill-opacity: 1; stroke-opacity: 1; stroke-width: 2; stroke: #000000" x="1344.1" y="397.661" width="168" height="57.2778" rx="0" ry="0"/>
+      <text font-size="28.2218" style="fill: #000000; fill-opacity: 1; stroke: none;text-anchor:middle;font-family:sans-serif;font-style:normal;font-weight:normal" x="1428.1" y="434.861">
+        <tspan x="1428.1" y="434.861"></tspan>
+      </text>
+    </g>
+    <text font-size="28.2218" style="fill: #000000; fill-opacity: 1; stroke: none;text-anchor:start;font-family:sans-serif;font-style:normal;font-weight:normal" x="1354.1" y="435.3">
+      <tspan x="1354.1" y="435.3">OcpMaster</tspan>
+    </text>
+    <g>
+      <rect style="fill: #ffffff; fill-opacity: 1; stroke-opacity: 1; stroke-width: 2; stroke: #000000" x="1354.2" y="564.6" width="154.7" height="57.2778" rx="0" ry="0"/>
+      <text font-size="28.2218" style="fill: #000000; fill-opacity: 1; stroke: none;text-anchor:middle;font-family:sans-serif;font-style:normal;font-weight:normal" x="1431.55" y="601.8">
+        <tspan x="1431.55" y="601.8">OcpSlave</tspan>
+      </text>
+    </g>
+    <rect style="fill: #ffffff; fill-opacity: 1; stroke-opacity: 1; stroke-width: 2; stroke: #000000" x="1375.75" y="823.439" width="141.226" height="145.933" rx="0" ry="0"/>
+    <text font-size="28.2218" style="fill: #000000; fill-opacity: 1; stroke: none;text-anchor:start;font-family:sans-serif;font-style:normal;font-weight:normal" x="1381.36" y="907.406">
+      <tspan x="1381.36" y="907.406">NodeSPM</tspan>
+    </text>
+    <g>
+      <rect style="fill: #ffffff; fill-opacity: 1; stroke-opacity: 1; stroke-width: 2; stroke: #000000" x="1368.1" y="773.8" width="154.7" height="57.2778" rx="0" ry="0"/>
+      <text font-size="28.2218" style="fill: #000000; fill-opacity: 1; stroke: none;text-anchor:middle;font-family:sans-serif;font-style:normal;font-weight:normal" x="1445.45" y="811">
+        <tspan x="1445.45" y="811">OcpSlave</tspan>
+      </text>
+    </g>
+    <g>
+      <rect style="fill: #ffffff; fill-opacity: 1; stroke-opacity: 1; stroke-width: 2; stroke: #000000" x="753.1" y="972.8" width="168" height="57.2778" rx="0" ry="0"/>
+      <text font-size="28.2218" style="fill: #000000; fill-opacity: 1; stroke: none;text-anchor:middle;font-family:sans-serif;font-style:normal;font-weight:normal" x="837.1" y="1010">
+        <tspan x="837.1" y="1010"></tspan>
+      </text>
+    </g>
+    <text font-size="28.2218" style="fill: #000000; fill-opacity: 1; stroke: none;text-anchor:start;font-family:sans-serif;font-style:normal;font-weight:normal" x="763.1" y="1010.44">
+      <tspan x="763.1" y="1010.44">OcpMaster</tspan>
+    </text>
+    <g>
+      <rect style="fill: #ffffff; fill-opacity: 1; stroke-opacity: 1; stroke-width: 2; stroke: #000000" x="1366.2" y="969.6" width="168" height="57.2778" rx="0" ry="0"/>
+      <text font-size="28.2218" style="fill: #000000; fill-opacity: 1; stroke: none;text-anchor:middle;font-family:sans-serif;font-style:normal;font-weight:normal" x="1450.2" y="1006.8">
+        <tspan x="1450.2" y="1006.8"></tspan>
+      </text>
+    </g>
+    <text font-size="28.2218" style="fill: #000000; fill-opacity: 1; stroke: none;text-anchor:start;font-family:sans-serif;font-style:normal;font-weight:normal" x="1376.2" y="1007.24">
+      <tspan x="1376.2" y="1007.24">OcpMaster</tspan>
+    </text>
+    <g>
+      <rect style="fill: #ffffff; fill-opacity: 1; stroke-opacity: 1; stroke-width: 2; stroke: #000000" x="761.1" y="1101.3" width="154.7" height="57.2778" rx="0" ry="0"/>
+      <text font-size="28.2218" style="fill: #000000; fill-opacity: 1; stroke: none;text-anchor:middle;font-family:sans-serif;font-style:normal;font-weight:normal" x="838.45" y="1138.5">
+        <tspan x="838.45" y="1138.5">OcpSlave</tspan>
+      </text>
+    </g>
+    <g>
+      <rect style="fill: #ffffff; fill-opacity: 1; stroke-opacity: 1; stroke-width: 2; stroke: #000000" x="1379.2" y="1109.1" width="154.7" height="57.2778" rx="0" ry="0"/>
+      <text font-size="28.2218" style="fill: #000000; fill-opacity: 1; stroke: none;text-anchor:middle;font-family:sans-serif;font-style:normal;font-weight:normal" x="1456.55" y="1146.3">
+        <tspan x="1456.55" y="1146.3">OcpSlave</tspan>
+      </text>
+    </g>
+    <g>
+      <rect style="fill: #ffffff; fill-opacity: 1; stroke-opacity: 1; stroke-width: 2; stroke: #000000" x="751.1" y="1339.3" width="168" height="57.2778" rx="0" ry="0"/>
+      <text font-size="28.2218" style="fill: #000000; fill-opacity: 1; stroke: none;text-anchor:middle;font-family:sans-serif;font-style:normal;font-weight:normal" x="835.1" y="1376.5">
+        <tspan x="835.1" y="1376.5"></tspan>
+      </text>
+    </g>
+    <text font-size="28.2218" style="fill: #000000; fill-opacity: 1; stroke: none;text-anchor:start;font-family:sans-serif;font-style:normal;font-weight:normal" x="761.1" y="1376.94">
+      <tspan x="761.1" y="1376.94">OcpMaster</tspan>
+    </text>
+    <g>
+      <rect style="fill: #ffffff; fill-opacity: 1; stroke-opacity: 1; stroke-width: 2; stroke: #000000" x="1373.2" y="1345.1" width="168" height="57.2778" rx="0" ry="0"/>
+      <text font-size="28.2218" style="fill: #000000; fill-opacity: 1; stroke: none;text-anchor:middle;font-family:sans-serif;font-style:normal;font-weight:normal" x="1457.2" y="1382.3">
+        <tspan x="1457.2" y="1382.3"></tspan>
+      </text>
+    </g>
+    <text font-size="28.2218" style="fill: #000000; fill-opacity: 1; stroke: none;text-anchor:start;font-family:sans-serif;font-style:normal;font-weight:normal" x="1383.2" y="1382.74">
+      <tspan x="1383.2" y="1382.74">OcpMaster</tspan>
+    </text>
+    <text font-size="28.2218" style="fill: #000000; fill-opacity: 1; stroke: none;text-anchor:start;font-family:sans-serif;font-style:normal;font-weight:normal" x="1119" y="1574.5">
+      <tspan x="1119" y="1574.5">OR</tspan>
+    </text>
+    <polyline style="fill: none; stroke-opacity: 1; stroke-width: 2; stroke: #000000" points="835.1,1397.59 835.1,1465.29 1136,1465.29 1136,1533 "/>
+    <polyline style="fill: none; stroke-opacity: 1; stroke-width: 2; stroke: #000000" points="793.1,1396.58 793.1,1496 1094,1496 1094,1530.21 "/>
+    <polyline style="fill: none; stroke-opacity: 1; stroke-width: 2; stroke: #000000" points="877.1,1396.58 877.1,1431 1177.1,1431 1177.1,1535.01 "/>
+    <polyline style="fill: none; stroke-opacity: 1; stroke-width: 2; stroke: #000000" points="1457.2,1403.39 1457.2,1468.19 1136,1468.19 1136,1533 "/>
+    <polyline style="fill: none; stroke-opacity: 1; stroke-width: 2; stroke: #000000" points="1415.2,1402.38 1415.2,1503 1210,1503 1210,1530 "/>
+    <polyline style="fill: none; stroke-opacity: 1; stroke-width: 2; stroke: #000000" points="1520,1404 1520,1433 1158,1433 1158,1531 "/>
+    <polyline style="fill: none; stroke-opacity: 1; stroke-width: 2; stroke: #000000" points="1053.64,1794.05 662,1794.05 662,1367.94 750.103,1367.94 "/>
+    <polyline style="fill: none; stroke-opacity: 1; stroke-width: 2; stroke: #000000" points="1234.74,1794.05 1671,1794.05 1671,1373.74 1542.19,1373.74 "/>
+    <line style="fill: none; stroke-opacity: 1; stroke-width: 2; stroke: #000000" x1="837.411" y1="1031.07" x2="838.139" y2="1100.31"/>
+    <line style="fill: none; stroke-opacity: 1; stroke-width: 2; stroke: #000000" x1="791.11" y1="1028.81" x2="791.838" y2="1098.05"/>
+    <line style="fill: none; stroke-opacity: 1; stroke-width: 2; stroke: #000000" x1="882.21" y1="1039.61" x2="882.938" y2="1108.85"/>
+    <line style="fill: none; stroke-opacity: 1; stroke-width: 2; stroke: #000000" x1="1408.2" y1="1026.88" x2="1411.04" y2="1096.65"/>
+    <line style="fill: none; stroke-opacity: 1; stroke-width: 2; stroke: #000000" x1="1454.41" y1="1031.21" x2="1455.14" y2="1100.45"/>
+    <line style="fill: none; stroke-opacity: 1; stroke-width: 2; stroke: #000000" x1="1505.51" y1="1034.01" x2="1506.24" y2="1103.25"/>
+    <line style="fill: none; stroke-opacity: 1; stroke-width: 2; stroke: #000000" x1="834.574" y1="620.081" x2="835.226" y2="776.358"/>
+    <line style="fill: none; stroke-opacity: 1; stroke-width: 2; stroke: #000000" x1="793.354" y1="622.304" x2="796.675" y2="777.361"/>
+    <line style="fill: none; stroke-opacity: 1; stroke-width: 2; stroke: #000000" x1="873.125" y1="619.078" x2="874.025" y2="777.361"/>
+    <line style="fill: none; stroke-opacity: 1; stroke-width: 2; stroke: #000000" x1="1395.55" y1="617.904" x2="1396.21" y2="774.181"/>
+    <line style="fill: none; stroke-opacity: 1; stroke-width: 2; stroke: #000000" x1="1480.65" y1="619.704" x2="1481.31" y2="775.981"/>
+    <line style="fill: none; stroke-opacity: 1; stroke-width: 2; stroke: #000000" x1="1428.75" y1="619.504" x2="1429.41" y2="775.781"/>
+    <line style="fill: none; stroke-opacity: 1; stroke-width: 2; stroke: #000000" x1="839.091" y1="439.119" x2="835.359" y2="560.82"/>
+    <line style="fill: none; stroke-opacity: 1; stroke-width: 2; stroke: #000000" x1="787.113" y1="443.33" x2="783.38" y2="565.031"/>
+    <line style="fill: none; stroke-opacity: 1; stroke-width: 2; stroke: #000000" x1="884.213" y1="441.13" x2="880.48" y2="562.831"/>
+    <line style="fill: none; stroke-opacity: 1; stroke-width: 2; stroke: #000000" x1="1393.31" y1="449.93" x2="1389.58" y2="571.631"/>
+    <line style="fill: none; stroke-opacity: 1; stroke-width: 2; stroke: #000000" x1="1425.41" y1="446.73" x2="1421.68" y2="568.431"/>
+    <line style="fill: none; stroke-opacity: 1; stroke-width: 2; stroke: #000000" x1="1481.51" y1="452.53" x2="1477.78" y2="574.231"/>
+    <g>
+      <rect style="fill: #ff0000; fill-opacity: 0; stroke-opacity: 1; stroke-width: 6; stroke: #000000" x="556.833" y="609.593" width="1173.33" height="1308" rx="0" ry="0"/>
+      <text font-size="12.7998" style="fill: #000000; fill-opacity: 1; stroke: none;text-anchor:middle;font-family:sans-serif;font-style:normal;font-weight:normal" x="1143.5" y="1267.49">
+        <tspan x="1143.5" y="1267.49"></tspan>
+      </text>
+    </g>
+    <text font-size="28.2218" style="fill: #000000; fill-opacity: 1; stroke: none;text-anchor:start;font-family:sans-serif;font-style:normal;font-weight:normal" x="1011.5" y="590.927">
+      <tspan x="1011.5" y="590.927">ConcurrentSPM</tspan>
+    </text>
+  </g>
+</svg>
