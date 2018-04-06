@@ -45,11 +45,12 @@ object SharedLLSCSpm {
 }
 
 class SharedLLSCSpmTester(dut: SharedLLSCSpm) extends Tester(dut) {
+    import SharedLLSCSpmTester._
 
   println("Shared LL/SC SPM Tester")
 
   def read(n: Int, addr: Int) = {
-    poke(dut.io(n).M.Addr, addr << 2)
+    poke(dut.io(n).M.Addr, addr)
     poke(dut.io(n).M.Cmd, 2) // OcpCmd.RD
     step(1)
     poke(dut.io(n).M.Cmd, 0) // OcpCmd.IDLE
@@ -61,36 +62,98 @@ class SharedLLSCSpmTester(dut: SharedLLSCSpm) extends Tester(dut) {
   }
 
   def write(n: Int, addr: Int, data: Int) = {
-    poke(dut.io(n).M.Addr, addr << 2)
+    poke(dut.io(n).M.Addr, addr)
     poke(dut.io(n).M.Data, data)
     poke(dut.io(n).M.Cmd, 1) // OcpCmd.WR
     poke(dut.io(n).M.ByteEn, 0x0f)
+    // peek(dut.io(n).S.Data)
+    // step(1)
+    // peek(dut.io(n).S.Data)
     step(1)
+    // peek(dut.io(n).S.Data)
+    // sys.exit(0)
     poke(dut.io(n).M.Cmd, 0) // OcpCmd.IDLE
     while (peek(dut.io(n).S.Resp) != 1) {
-        for (k <- 0 until 4) {
-            peek(dut.io(k).S.Resp)
-        }
+        // peek(dut.io(n).S.Data)
       step(1)
     }
+    peek(dut.io(n).S.Data)
+    dut.io(n).S.Data
   }
 
-  for (i <- 0 until 32) {
-    write(0, i, i * 0x100 + 0xa)
-    // write(1, i+32, i * 0x10000 + 0xb)
+  // Basic read-write test
+
+  for (i <- 0.until(1024, GRANULARITY)) {
+    expect(write(0, i, i * 0x100 + 0xa), 0)
   }
   step(1)
-  for (i <- 0 until 32) {
+  for (i <- 0.until(1024, GRANULARITY)) {
     expect(read(0, i), i * 0x100 + 0xa)
-    // expect(read(1, i+32), i * 0x10000 + 0xb)
   }
+  // sys.exit(0)
+
+  // LL/SC tests
+
+  // Write to the same memory location without reading in between should fail
+  expect(write(0, 0, 0xFF), 0)
+  expect(write(0, 0, 0xF0), 1)
+
+  // Failed writes should not affect memory
+  expect(read(0, 0), 0xFF)
+
+  // Write to the same memory location with a read from the same core in
+  expect(write(0, 0, 0xFF), 0)
+  expect(read(0, 0), 0xFF)
+  expect(write(0, 0, 0xF0), 0)
+
+  // Write to memory in the same granularity block should fail
+  if (GRANULARITY != 1) {
+      expect(write(0, GRANULARITY * 9, 0xFF), 0)
+      expect(write(0, GRANULARITY * 9 + 1, 0xF0), 1)
+  }
+
+  // Write to memory in different granularity blocks should succeed
+  expect(write(0, GRANULARITY * 5, 0xFF), 0)
+  expect(write(0, GRANULARITY * 3, 0xF0), 0)
+
+  // Write frrom a different core should invalidate subsequent writes
+  // from other cores
+  read(0, GRANULARITY * 8)
+  read(1, GRANULARITY * 8)
+  expect(write(1, GRANULARITY * 8, 0xF0), 0)
+  expect(write(0, GRANULARITY * 8, 0xFF), 1)
+
+  // The first write after a read shoudl always succeed
+  read(0, GRANULARITY * 8)
+  read(1, GRANULARITY * 8)
+  expect(write(1, GRANULARITY * 8, 0xF0), 0)
+  expect(read(0, GRANULARITY * 8), 0xF0)
+  expect(write(0, GRANULARITY * 8, 0xFF), 0)
+  // sys.exit(0)
+
+  // Unlike CAS, LL/SC doesn't suffer the ABA problem
+  val aValue = 0x19
+  val bValue = 0x84
+
+  read(0, GRANULARITY * 8)                     // So that next write doesn't fail
+  expect(write(0, GRANULARITY * 8, aValue), 0) // a value is written by core 0
+  expect(read(0, GRANULARITY * 8), aValue)     // a value is read
+
+  expect(read(1, GRANULARITY * 8), aValue)     // So that next write doesn't fail
+  expect(write(1, GRANULARITY * 8, bValue), 0) // value b is written by core 1
+  expect(read(1, GRANULARITY * 8), bValue)     // So that next write doesn't fail
+  expect(write(1, GRANULARITY * 8, aValue), 0) // vaue a is written again by core 1
+
+  expect(write(0, GRANULARITY * 8, 0xFF), 1)   // Store Conditional fails
 }
 
 object SharedLLSCSpmTester {
+    val GRANULARITY = 32
+
   def main(args: Array[String]): Unit = {
     chiselMainTest(Array("--genHarness", "--test", "--backend", "c",
       "--compile", "--vcd", "--targetDir", "generated"),
-      () => SharedLLSCSpm(64, 4, 1024)) {
+      () => SharedLLSCSpm(GRANULARITY, 4, 1024)) {
         c => new SharedLLSCSpmTester(c)
       }
   }

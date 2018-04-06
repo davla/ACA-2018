@@ -44,9 +44,10 @@ class Arbiter(
     val masterReg = RegInit(io.slave.M)
     val dvaRepl = Reg(init = OcpResp.NULL, next = OcpResp.NULL)
 
-    val cnt = ClockCounter(nrCores)
-    val enabled = cnt.io.n === UInt(id)
-    val dva = cnt.io.n === UInt((id + delay) % nrCores)
+    val cnt = RegInit(UInt(0, width = log2Up(nrCores)))
+    cnt := Mux(cnt === UInt(nrCores - 1), UInt(0), cnt + UInt(1))
+    val enabled = cnt === UInt(id)
+    val dva = cnt === UInt((id + delay) % nrCores)
 
     // Data comes from the SPM, response from the FSM
     io.slave.S.Resp := dvaRepl
@@ -71,7 +72,15 @@ class Arbiter(
                 masterReg.Cmd := OcpCmd.IDLE
                 io.master.M := masterReg
                 io.core := UInt(id)
-                state := waitingDva
+
+                // Scala if, generates different hardware
+                if (delay == 0) {
+                    dvaRepl := OcpResp.DVA
+                    state := waitingCmd
+                }
+                else {
+                    state := waitingDva
+                }
             }
         }
 

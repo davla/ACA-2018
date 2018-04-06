@@ -67,19 +67,26 @@ class LLSCSpm(
     // Dirty bits
     val dirtyBits = Mem(DirtyBits(nrCores), size / granularity)
 
-    // val respCnt =
 
     val masterReg = RegInit(io.slave.M)
     masterReg := io.slave.M
-    val slaveReg = RegInit(spm.io.S)
+    val slaveReg = Reg(new OcpSlaveSignals(DATA_WIDTH))
+
+    val delayReg = RegInit(UInt(1, width = 1))
 
     spm.io.M := masterReg
-    io.slave.S <> Mux(slaveReg.Resp === OcpResp.NULL, spm.io.S, slaveReg)
+    io.slave.S <> Mux(delayReg === UInt(0), slaveReg, spm.io.S)
 
     val currDirtyBits = getDirtyBits(io.slave.M.Addr)
     io.db := spm.io.S.Resp
 
-    slaveReg.Resp := OcpResp.NULL
+    when (delayReg === UInt(0)) {
+        slaveReg.Resp := OcpResp.NULL
+    }
+
+    when (slaveReg.Resp =/= OcpResp.NULL) {
+        delayReg := delayReg - UInt(1)
+    }
 
     switch (io.slave.M.Cmd) {
         is (OcpCmd.RD) {
@@ -87,6 +94,7 @@ class LLSCSpm(
         }
 
         is (OcpCmd.WR) {
+            delayReg := UInt(1)
             slaveReg.Resp := OcpResp.DVA
 
             when (DirtyBits.get(currDirtyBits, io.core) === DirtyBits.PRISTINE) {
