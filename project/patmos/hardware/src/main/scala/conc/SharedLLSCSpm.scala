@@ -27,7 +27,7 @@ class SharedLLSCSpm(
 
     val arbiters = new Array[Arbiter](nrCores)
     for (i <- 0 until nrCores) {
-        arbiters(i) = Arbiter(i, nrCores, 1)
+        arbiters(i) = Arbiter(i, nrCores, 0)
         val arbiter = arbiters(i)
 
         arbiter.io.slave <> io(i)

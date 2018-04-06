@@ -62,11 +62,11 @@ class LLSCSpm(
 
     val addrBits = log2Up(size / BYTES_PER_WORD)
 
-    // respond and return (dummy) data
-    val cmdReg = Reg(next = io.slave.M.Cmd)
-    io.slave.S.Resp := Mux(cmdReg === OcpCmd.WR || cmdReg === OcpCmd.RD,
-                     OcpResp.DVA, OcpResp.NULL)
-    io.slave.S.Data := Bits(0)
+    // generate byte memories
+    val mem = new Array[MemBlockIO](BYTES_PER_WORD)
+    for (i <- 0 until BYTES_PER_WORD) {
+        mem(i) = MemBlock(size / BYTES_PER_WORD, BYTE_WIDTH, bypass = false).io
+    }
 
     // Dirty bits
     val dirtyBits = Mem(DirtyBits(nrCores), size / granularity)
@@ -74,42 +74,38 @@ class LLSCSpm(
     val currDirtyBits = getDirtyBits(io.slave.M.Addr)
     val isPristine = DirtyBits.get(currDirtyBits, io.core) ===
             DirtyBits.PRISTINE
+    val shouldWrite = io.slave.M.Cmd === OcpCmd.WR && isPristine
 
-    // generate byte memories
-    val mem = new Array[MemBlockIO](BYTES_PER_WORD)
-    for (i <- 0 until BYTES_PER_WORD) {
-        mem(i) = MemBlock(size / BYTES_PER_WORD, BYTE_WIDTH, bypass = false).io
-    }
+    val cmdReg = Reg(next = io.slave.M.Cmd)
+    val dataReg = RegInit(io.slave.M.Data)
 
     // store
-    val stmsk = Mux(io.slave.M.Cmd === OcpCmd.WR && isPristine,
-            io.slave.M.ByteEn, Bits(0, width = DATA_WIDTH / 8))
+    val stmsk = Mux(shouldWrite, io.slave.M.ByteEn, Bits(0))
     for (i <- 0 until BYTES_PER_WORD) {
         mem(i) <= (stmsk(i), io.slave.M.Addr(addrBits + 1, 2),
             io.slave.M.Data(BYTE_WIDTH*(i+1)-1, BYTE_WIDTH*i))
     }
 
-    // load
-    val rdData = Bits(0, width = DATA_WIDTH)
+    val rdData = mem.map(_(io.slave.M.Addr(addrBits + 1, 2))).reduceLeft((x,y) => y ## x)
+
+    io.slave.S.Resp := Mux(cmdReg === OcpCmd.WR || cmdReg === OcpCmd.RD,
+        OcpResp.DVA, OcpResp.NULL)
+    io.slave.S.Data := Mux(cmdReg === OcpCmd.RD, rdData, dataReg)
 
     switch (io.slave.M.Cmd) {
         is (OcpCmd.RD) {
             currDirtyBits := DirtyBits.makePristine(currDirtyBits, io.core)
-            rdData := mem.map(_(io.slave.M.Addr(addrBits + 1, 2))).reduceLeft((x,y) => y ## x)
         }
 
         is (OcpCmd.WR) {
             when (isPristine) {
                 currDirtyBits := DirtyBits.makeDirty(currDirtyBits)
-                rdData := Bits(1, width = DATA_WIDTH)
+                dataReg := Bits(0, width = DATA_WIDTH)
             }.otherwise {
-                rdData := Bits(0, width = DATA_WIDTH)
+                dataReg := Bits(1, width = DATA_WIDTH)
             }
         }
     }
-
-    // return actual data
-    io.slave.S.Data := rdData
 
     def getDirtyBits(address :UInt) = {
         val dirtyBitAddr = address >> log2Up(granularity)
