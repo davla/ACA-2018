@@ -168,15 +168,57 @@ class LLSCSpmTester(dut: LLSCSpm) extends Tester(dut) {
   // Failed writes should not affect memory
   expect(read(0), 0xFF)
 
-  // Write to the same memory location with a read in between should succeed
+  // Write to the same memory location with a read from the same core in
   expect(write(0, 0xFF), 0)
   expect(read(0), 0xFF)
   expect(write(0, 0xF0), 0)
 
   // Write to memory in the same granularity block should fail
-  expect(write(GRANULARITY * 9, 0xFF), 0)
-  expect(write(GRANULARITY * 9 + 1, 0xF0), 1)
+  if (GRANULARITY != 1) {
+      expect(write(GRANULARITY * 9, 0xFF), 0)
+      expect(write(GRANULARITY * 9 + 1, 0xF0), 1)
+  }
 
+  // Write to memory in different granularity blocks should succeed
+  expect(write(GRANULARITY * 5, 0xFF), 0)
+  expect(write(GRANULARITY * 3, 0xF0), 0)
+
+  // Write frrom a different core should invalidate subsequent writes
+  // from other cores
+  poke(dut.io.core, 0)
+  read(GRANULARITY * 8)
+  poke(dut.io.core, 1)
+  read(GRANULARITY * 8)
+  expect(write(GRANULARITY * 8, 0xF0), 0)
+  poke(dut.io.core, 0)
+  expect(write(GRANULARITY * 8, 0xFF), 1)
+
+  // The first write after a read shoudl always succeed
+  poke(dut.io.core, 0)
+  read(GRANULARITY * 8)
+  poke(dut.io.core, 1)
+  read(GRANULARITY * 8)
+  expect(write(GRANULARITY * 8, 0xF0), 0)
+  poke(dut.io.core, 0)
+  expect(read(GRANULARITY * 8), 0xF0)
+  expect(write(GRANULARITY * 8, 0xFF), 0)
+
+  // Unlike CAS, LL/SC doesn't siffer the ABA problem
+  val aValue = 0x19
+  val bValue = 0x84
+
+  poke(dut.io.core, 0)
+  read(GRANULARITY * 8)                     // So that next write doesn't fail
+  expect(write(GRANULARITY * 8, aValue), 0) // a value is written by core 0
+  expect(read(GRANULARITY * 8), aValue)     // a value is read
+
+  poke(dut.io.core, 1)
+  expect(read(GRANULARITY * 8), aValue)     // So that next write doesn't fail
+  expect(write(GRANULARITY * 8, bValue), 0) // value b is written by core 1
+  expect(read(GRANULARITY * 8), bValue)     // So that next write doesn't fail
+  expect(write(GRANULARITY * 8, aValue), 0) // vaue a is written again by core 1
+  poke(dut.io.core, 0)
+  expect(write(GRANULARITY * 8, 0xFF), 1)   // Store Conditional fails
 }
 
 object LLSCSpmTester {
