@@ -58,55 +58,58 @@ class LLSCSpm(
     val io = new Bundle() {
         val slave = new OcpCoreSlavePort(ADDR_WIDTH, DATA_WIDTH)
         val core = UInt(INPUT, log2Up(nrCores))
-        val db = Bits(OUTPUT, 2)
     }
 
-    // The actual scratchpad memory
-    val spm = Module(new Spm(size))
+    val addrBits = log2Up(size / BYTES_PER_WORD)
+
+    // respond and return (dummy) data
+    val cmdReg = Reg(next = io.slave.M.Cmd)
+    io.slave.S.Resp := Mux(cmdReg === OcpCmd.WR || cmdReg === OcpCmd.RD,
+                     OcpResp.DVA, OcpResp.NULL)
+    io.slave.S.Data := Bits(0)
 
     // Dirty bits
     val dirtyBits = Mem(DirtyBits(nrCores), size / granularity)
 
-
-    val masterReg = RegInit(io.slave.M)
-    masterReg := io.slave.M
-    val slaveReg = Reg(new OcpSlaveSignals(DATA_WIDTH))
-
-    val delayReg = RegInit(UInt(1, width = 1))
-
-    spm.io.M := masterReg
-    io.slave.S <> Mux(delayReg === UInt(0), slaveReg, spm.io.S)
-
     val currDirtyBits = getDirtyBits(io.slave.M.Addr)
-    io.db := spm.io.S.Resp
+    val isPristine = DirtyBits.get(currDirtyBits, io.core) ===
+            DirtyBits.PRISTINE
 
-    when (delayReg === UInt(0)) {
-        slaveReg.Resp := OcpResp.NULL
+    // generate byte memories
+    val mem = new Array[MemBlockIO](BYTES_PER_WORD)
+    for (i <- 0 until BYTES_PER_WORD) {
+        mem(i) = MemBlock(size / BYTES_PER_WORD, BYTE_WIDTH, bypass = false).io
     }
 
-    when (slaveReg.Resp =/= OcpResp.NULL) {
-        delayReg := delayReg - UInt(1)
+    // store
+    val stmsk = Mux(io.slave.M.Cmd === OcpCmd.WR && isPristine,
+            io.slave.M.ByteEn, Bits(0, width = DATA_WIDTH / 8))
+    for (i <- 0 until BYTES_PER_WORD) {
+        mem(i) <= (stmsk(i), io.slave.M.Addr(addrBits + 1, 2),
+            io.slave.M.Data(BYTE_WIDTH*(i+1)-1, BYTE_WIDTH*i))
     }
+
+    // load
+    val rdData = Bits(0, width = DATA_WIDTH)
 
     switch (io.slave.M.Cmd) {
         is (OcpCmd.RD) {
             currDirtyBits := DirtyBits.makePristine(currDirtyBits, io.core)
+            rdData := mem.map(_(io.slave.M.Addr(addrBits + 1, 2))).reduceLeft((x,y) => y ## x)
         }
 
         is (OcpCmd.WR) {
-            delayReg := UInt(1)
-            slaveReg.Resp := OcpResp.DVA
-
-            when (DirtyBits.get(currDirtyBits, io.core) === DirtyBits.PRISTINE) {
+            when (isPristine) {
                 currDirtyBits := DirtyBits.makeDirty(currDirtyBits)
-                slaveReg.Data := Bits(0)
-
+                rdData := Bits(1, width = DATA_WIDTH)
             }.otherwise {
-                masterReg.Cmd := OcpCmd.IDLE
-                slaveReg.Data := Bits(1)
+                rdData := Bits(0, width = DATA_WIDTH)
             }
         }
     }
+
+    // return actual data
+    io.slave.S.Data := rdData
 
     def getDirtyBits(address :UInt) = {
         val dirtyBitAddr = address >> log2Up(granularity)
@@ -129,7 +132,6 @@ class LLSCSpmTester(dut: LLSCSpm) extends Tester(dut) {
     poke(dut.io.slave.M.Addr, addr)
     poke(dut.io.slave.M.Cmd, 2) // OcpCmd.RD
     step(1)
-    peek(dut.io.db)
     poke(dut.io.slave.M.Cmd, 0) // OcpCmd.IDLE
     while (peek(dut.io.slave.S.Resp) != 1) {
       step(1)
@@ -144,7 +146,6 @@ class LLSCSpmTester(dut: LLSCSpm) extends Tester(dut) {
     poke(dut.io.slave.M.Cmd, 1) // OcpCmd.WR
     poke(dut.io.slave.M.ByteEn, 0x0f)
     step(1)
-    peek(dut.io.db)
     poke(dut.io.slave.M.Cmd, 0) // OcpCmd.IDLE
     while (peek(dut.io.slave.S.Resp) != 1) {
       step(1)
