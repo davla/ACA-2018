@@ -1,0 +1,52 @@
+The transactional memory is an augmented version of the LL/SC scratchpad memory.
+The main idea is to be able to write only when all the read variables (that have
+not been written to yet) remained untouched.
+
+A transaction is started by reading from the transactional memory; the commit
+process begins when the first write occurs and terminates when all the read
+variables have been written to; the transaciton is then finished.
+This saves us from introducing new instructions.
+
+We achieve this by having a more complex state for the memory locations: they
+can be \textit{written to after the start of a transaction},
+\textit{written to before the start of a transaction} or
+\textit{untouched since the start of a transaction}. Relevant aggregated
+information for the bits is derived by a clever encoding for these states and
+the use of OR gates for all the status bits relative to a single core.
+The first state is encoded as \texttt{10}; the second as \texttt{00}; the third
+as \texttt{01}. This way, by OR-ing all the most significant bits for a core
+we know whether any memory block has been written to since the start of a transaction;
+on the other hand, by OR-ing the least significant bits in the same way, we
+derive when all the variables that have been read have been also written to.
+
+Writes are only allowed if no location is in the \textit{written to after the start of a transaction}
+state; if this is not the case, then a specific error is returned.
+Furthermore, neither reads nor writes are allowed when a core is in the commit
+process, but only for the locations that have not yet been commmitted, that is
+still in the \textit{untouched since the start of a transaction} state. This
+ensures that:
+
+\begin{itemize}
+    \item Only consistent data is read: in fact, even if locations are available
+        for reading before the end of a commit, those are only the ones that have
+        actually been written to.
+    \item The conditions under which a transaction starts to commit stay unchanged
+        throughout the commmit process: indeed, it the read variables can not
+        be written, their state can not change and with it the precondition for
+        committing.
+    \item Commits can not interleave: there is no point in time at which locations
+        
+\end{itemize}
+
+If a write operation is carried out, then the status bits for the location are
+written as follows: for every core other than the one executing the command, if
+the status bit itself is \textit{untouched since the start of a transaction},
+then it is set to \textit{written to after the start of a transaction},
+otherwise, it is left untouched; for the core itself, it is set to
+\textit{written to before the start of a transaction}.
+
+\textit{Atomicity}
+  \begin{itemize}
+    \item Commit
+    \item Abort
+  \end{itemize}
