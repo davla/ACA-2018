@@ -124,6 +124,7 @@ sympy-plots-for-*.tex/
 
 # Patmos
 
+**/bootable
 /project/local/
 
 # Chisel

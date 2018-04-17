@@ -90,7 +90,6 @@ class SharedLLSCSpmTester(dut: SharedLLSCSpm) extends Tester(dut) {
   for (i <- 0.until(1024, GRANULARITY)) {
     expect(read(0, i), i * 0x100 + 0xa)
   }
-  // sys.exit(0)
 
   // LL/SC tests
 
@@ -129,7 +128,6 @@ class SharedLLSCSpmTester(dut: SharedLLSCSpm) extends Tester(dut) {
   expect(write(1, GRANULARITY * 8, 0xF0), 0)
   expect(read(0, GRANULARITY * 8), 0xF0)
   expect(write(0, GRANULARITY * 8, 0xFF), 0)
-  // sys.exit(0)
 
   // Unlike CAS, LL/SC doesn't suffer the ABA problem
   val aValue = 0x19
