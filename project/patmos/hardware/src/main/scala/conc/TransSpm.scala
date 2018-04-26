@@ -74,14 +74,17 @@ object StatusBits {
         val thisCoreSet = Mux(inCommit, makeInCommit(location, core),
                 makeWrittenBefore(location, core))
 
-        val newLocation = catAll(Array.tabulate (nrCores) (core => {
-            val coreState = get(thisCoreSet, core)
+        val newStates = new Array[Bits](nrCores)
+        for (k <- 0 until nrCores) {
+            val coreState = get(thisCoreSet, k)
             val isUntouched = coreState === UNTOUCHED_SINCE_START
-            Mux(isUntouched, WRITTEN_AFTER_START, coreState)
-        }).reverse)
 
-        location := newLocation
+            // Status bits are reversed
+            newStates(nrCores - 1 - k) = Mux(isUntouched, WRITTEN_AFTER_START,
+                coreState)
+        }
 
+        location := catAll(newStates)
     }
 }
 
@@ -130,24 +133,32 @@ class TransSpm(
     // for every location. It is used to check whether any location is in the
     // WRITTEN_AFTER_START state. It is ignored during commits, that is the
     // only moment in which the state can be WRITTEN_IN_COMMIT
-    val allUntouched = Vec.tabulate (nrCores) (core => {
-        val allLeftBits = statusBits.map(location => {
+    val allUntouchedArr = new Array[Bool](nrCores)
+    for (core <- 0 until nrCores) {
+        val leftBits = new Array[Bits](statusBitsSize)
+        for (addr <- 0 until statusBitsSize) {
+            val location = statusBits(addr)
             val coreState = StatusBits.get(location, core)
-            coreState(1)
-        })
-        orAll(allLeftBits.toArray) === Bits(0)
-    })
+            leftBits(addr) = coreState(1)
+        }
+        allUntouchedArr(core) = orAll(leftBits) === Bits(0)
+    }
+    val allUntouched = Vec(allUntouchedArr)
 
     // Each of these bit-strings is the concatenation of the right bit of a
     // core state for every location. As explained below, they are used to
     // detect the end of a commit
-    val allRightBits = Vec.tabulate (nrCores) (core => {
-        val allRightBits = statusBits.map(location => {
+    val allRightBitsArr = new Array[Bits](nrCores)
+    for (core <- 0 until nrCores) {
+        val rightBits = new Array[Bits](statusBitsSize)
+        for (addr <- 0 until statusBitsSize) {
+            val location = statusBits(addr)
             val coreState = StatusBits.get(location, core)
-            coreState(0).toBits
-        })
-        catAll(allRightBits.toArray)
-    })
+            rightBits(addr) = coreState(0)
+        }
+        allRightBitsArr(core) = catAll(rightBits)
+    }
+    val allRightBits = Vec(allRightBitsArr)
 
     // After masking the bit for the current location, the negation of the
     // recursive OR of the bit strings for this core tells whether all the
