@@ -84,7 +84,7 @@ object StatusBits {
                 coreState)
         }
 
-        location := catAll(newStates)
+        catAll(newStates)
     }
 }
 
@@ -216,7 +216,7 @@ class TransSpm(
                 when (allWritten) {
                     doCommit(io.core, io.slave.M.Addr)
                 }.otherwise {
-                    StatusBits.write(currentStatusBits, io.core, Bool(true))
+                    currentStatusBits := StatusBits.write(currentStatusBits, io.core, Bool(true))
                 }
 
                 inCommit(io.core) := ~allWritten
@@ -233,7 +233,7 @@ class TransSpm(
             val location = statusBits(addr)
 
             when (UInt(addr) === lastWrite) {
-                StatusBits.write(currentStatusBits, io.core, Bool(false))
+                currentStatusBits := StatusBits.write(currentStatusBits, io.core, Bool(false))
 
             }.otherwise {
                 location := StatusBits.makeWrittenBefore(currentStatusBits, io.core)
