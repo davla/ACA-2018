@@ -17,7 +17,8 @@ object DirtyBits {
     val DIRTY = Bits(1, width = 1)
 
     def apply(nrCores :Int) = {
-        val location = Fill(nrCores, DirtyBits.PRISTINE)
+        val location = Bits()
+        location := Fill(nrCores, PRISTINE)
         location.setWidth(nrCores)
         location
     }
@@ -27,8 +28,8 @@ object DirtyBits {
     }
 
     def makeDirty(location :Bits) = {
-        val newLocation = Fill(location.getWidth, Bits(1, width = 1))
-        newLocation.setWidth(location.getWidth)
+        val newLocation = location
+        newLocation := Fill(location.getWidth, DIRTY)
         newLocation
     }
 
@@ -37,6 +38,8 @@ object DirtyBits {
         location & mask
     }
 }
+class DirtyBits
+
 
 class LLSCSpm(
     val granularity :Int,
