@@ -19,12 +19,12 @@ object StatusBits {
     val WRITTEN_AFTER_START = Bits("b11")
     val WRITTEN_IN_COMMIT = Bits("b10")
 
-    val stateWidth = StatusBits.WRITTEN_BEFORE_START.getWidth
+    val stateWidth = WRITTEN_BEFORE_START.getWidth
     val indexShift = log2Up(stateWidth)
 
     def apply(nrCores :Int) = {
-        val location = Fill(nrCores, StatusBits.WRITTEN_BEFORE_START)
-        location.setWidth(nrCores * stateWidth)
+        val location = Bits()
+        location := Fill(nrCores, WRITTEN_BEFORE_START)
         location
     }
 
@@ -32,95 +32,56 @@ object StatusBits {
         (location & andMask) | orMask
     }
 
-    def makeUntouched(location :Bits, index :UInt) = {
-        val andBitMask = ~ (UInt(1) << (index << indexShift + 1))
-        val orBitMask = UInt(1) << (index << indexShift)
-        applyBitMask(location, andBitMask, orBitMask)
-    }
-
-    def makeWritten(location :Bits, index :UInt) = {
-        val andBitMask = ~ (UInt(0, width = stateWidth) << (index << indexShift))
-        val orBitMask = UInt(0, width = location.getWidth)
-        applyBitMask(location, andBitMask, orBitMask)
-    }
-
-    def hasUncommitted(location :Bits, commitStatus :Bits) = {
-        val nrCores = location.getWidth / stateWidth
-        val found = Bits()
-        found := Bits(0, width = nrCores)
-        found.setWidth(nrCores)
-
-        for (k <- 0 until nrCores) {
-            val coreState = get(location, k)
-            found(k) := commitStatus(k) && coreState === UNTOUCHED_SINCE_START
-        }
-
-        found.orR()
-    }
-
-    def hasInCommit(location :Bits) = {
-        val nrCores = location.getWidth / stateWidth
-        var found = Bits()
-        found := Bits(0, width = nrCores)
-        found.setWidth(nrCores)
-
-        for (k <- 0 until nrCores) {
-            val coreState = get(location, k)
-            found(k) := coreState === WRITTEN_IN_COMMIT
-        }
-
-        found.orR()
-    }
-
-    def write(location :Bits, core :UInt) = {
-        val nrCores = location.getWidth / stateWidth
-        val newLocation = location
-
-        for (k <- 0 until nrCores) {
-            val start = k * stateWidth
-            val end = start + stateWidth - 1
-
-            // Current core should write WRITTEN_IN_COMMIT
-            when (UInt(k) === core) {
-                newLocation(end, start) := WRITTEN_IN_COMMIT
-            }
-
-            // Core has read, setting to WRITTEN_AFTER_START
-            .elsewhen (get(location, k) === StatusBits.UNTOUCHED_SINCE_START) {
-                newLocation(end, start) := StatusBits.WRITTEN_AFTER_START
-            }
-        }
-
-        newLocation
-    }
-
-    def write0(location :Bits, core :UInt, doneCommitting :Bool) = {
-        val nrCores = location.getWidth / stateWidth
-        val newLocation = location
-
-        for (k <- 0 until nrCores) {
-            val start = k * stateWidth
-            val end = start + stateWidth - 1
-
-            // Current core should write WRITTEN_IN_COMMIT
-            when (UInt(k) === core) {
-                newLocation(end, start) := Mux(doneCommitting,
-                    WRITTEN_BEFORE_START, WRITTEN_IN_COMMIT)
-            }
-
-            // Core has read, setting to WRITTEN_AFTER_START
-            .elsewhen (get(location, k) === StatusBits.UNTOUCHED_SINCE_START) {
-                newLocation(end, start) := StatusBits.WRITTEN_AFTER_START
-            }
-        }
-
-        newLocation
-    }
-
     def get(location :Bits, index :Int) = {
         val start = index * stateWidth
         val end = start + stateWidth - 1
         location(end, start)
+    }
+
+    def makeWrittenBefore(location: Bits, index :UInt) = {
+        val andBitMask = ~(UInt("b11") << (index << indexShift))
+        val orBitMask = UInt(0)
+        applyBitMask(location, andBitMask, orBitMask)
+    }
+
+    def makeInCommit(location :Bits, index :UInt) = {
+        val andBitMask = ~(UInt(1) << (index << indexShift))
+        val orBitMask = UInt(1) << ((index << indexShift) + UInt(1))
+        applyBitMask(location, andBitMask, orBitMask)
+    }
+
+    def makeUntouched(location :Bits, index :UInt) = {
+        val andBitMask = ~(UInt(1) << ((index << indexShift) + UInt(1)))
+        val orBitMask = UInt(1) << (index << indexShift)
+        applyBitMask(location, andBitMask, orBitMask)
+    }
+
+    def orMap(location :Bits, f :(Bits, Int) => Bool) = {
+        val nrCores = location.getWidth / stateWidth
+        var acc = Bits()
+        acc := Bits(0, width = nrCores)
+
+        for (k <- 0 until nrCores) {
+            acc(k) := f(get(location, k), k)
+        }
+
+        acc.orR
+    }
+
+    def write(location :Bits, core :UInt, inCommit :Bool) = {
+        val nrCores = location.getWidth / stateWidth
+
+        val thisCoreSet = Mux(inCommit, makeInCommit(location, core),
+                makeWrittenBefore(location, core))
+
+        val newLocation = catAll(Array.tabulate (nrCores) (core => {
+            val coreState = get(thisCoreSet, core)
+            val isUntouched = coreState === UNTOUCHED_SINCE_START
+            Mux(isUntouched, WRITTEN_AFTER_START, coreState)
+        }).reverse)
+
+        location := newLocation
+
     }
 }
 
@@ -141,11 +102,16 @@ class TransSpm(
         sys.error (s"LLSCSpm: granularity has to be less than size, but granularity $granularity and size $size were provided.")
     }
 
+    import StatusBits._
+
     val io = new Bundle() {
         val slave = new OcpCoreSlavePort(ADDR_WIDTH, DATA_WIDTH)
         val core = UInt(INPUT, log2Up(nrCores))
+
+        val commits = Bits(OUTPUT, 8)
         val location = Bits(OUTPUT, 8)
         val db = Bits(OUTPUT, 2)
+        val written = Bits(OUTPUT, 1)
     }
 
     val addrBits = log2Up(size / BYTES_PER_WORD)
@@ -159,9 +125,11 @@ class TransSpm(
 
     // Status bits
     val statusBits = Vec.fill(statusBitsSize)(RegInit(StatusBits(nrCores)))
-    // val statusBits = Mem(StatusBits(nrCores), statusBitsSize)
 
-    // Or gates
+    // Each of the OR gates here has as input the left bit of a core state
+    // for every location. It is used to check whether any location is in the
+    // WRITTEN_AFTER_START state. It is ignored during commits, that is the
+    // only moment in which the state can be WRITTEN_IN_COMMIT
     val allUntouched = Vec.tabulate (nrCores) (core => {
         val allLeftBits = statusBits.map(location => {
             val coreState = StatusBits.get(location, core)
@@ -169,21 +137,33 @@ class TransSpm(
         })
         orAll(allLeftBits.toArray) === Bits(0)
     })
-    val allWritten = Vec.tabulate (nrCores) (core => {
+
+    // Each of these bit-strings is the concatenation of the right bit of a
+    // core state for every location. As explained below, they are used to
+    // detect the end of a commit
+    val allRightBits = Vec.tabulate (nrCores) (core => {
         val allRightBits = statusBits.map(location => {
             val coreState = StatusBits.get(location, core)
-            coreState(0)
+            coreState(0).toBits
         })
-        orAll(allRightBits.toArray) === Bits(0)
+        catAll(allRightBits.toArray)
     })
+
+    // After masking the bit for the current location, the negation of the
+    // recursive OR of the bit strings for this core tells whether all the
+    // read locations have been written to, marking the end of a commit. The
+    // masking of the current location assumes a write in that location in the
+    // current cycle.
+    val allWritten = ~((allRightBits(io.core) & ~(UInt(1) << io.slave.M.Addr))
+            .orR)
 
     // Commit bits
     val inCommit = RegInit(Bits(0, width = nrCores))
 
     val currentStatusBits = getStatusBits(io.slave.M.Addr)
 
-    val hasUncommitted = StatusBits.hasUncommitted(currentStatusBits, inCommit)
-    val hasInCommit = StatusBits.hasInCommit(currentStatusBits)
+    val hasUncommitted = StatusBits.orMap(currentStatusBits, isUncommitted _)
+    val hasInCommit = StatusBits.orMap(currentStatusBits, isInCommit _)
     val committingHere = hasUncommitted || hasInCommit
 
     val canRead = ~hasUncommitted
@@ -193,6 +173,8 @@ class TransSpm(
 
     io.db := hasUncommitted ## hasInCommit
     io.location := currentStatusBits
+    io.commits := StatusBits.makeWrittenBefore(currentStatusBits, io.core)
+    io.written := allWritten
 
     val cmdReg = Reg(next = io.slave.M.Cmd)
     val dataReg = RegInit(io.slave.M.Data)
@@ -220,16 +202,30 @@ class TransSpm(
 
         is (OcpCmd.WR) {
             when (canWrite) {
-                currentStatusBits := StatusBits.write(currentStatusBits,
-                        io.core)
-                dataReg := Bits(0, width = DATA_WIDTH)
-
-                inCommit(io.core) := Mux(allWritten(io.core), Bool(false), Bool(true))
-                when (allWritten(io.core)) {
+                when (allWritten) {
                     doCommit(io.core, io.slave.M.Addr)
+                }.otherwise {
+                    StatusBits.write(currentStatusBits, io.core, Bool(true))
                 }
+
+                inCommit(io.core) := ~allWritten
+                dataReg := Bits(0)
+
             }.otherwise {
-                dataReg := Bits(1, width = DATA_WIDTH)
+                dataReg := Bits(1)
+            }
+        }
+    }
+
+    def doCommit(core :UInt, lastWrite :UInt) = {
+        for (addr <- 0 until statusBitsSize) {
+            val location = statusBits(addr)
+
+            when (UInt(addr) === lastWrite) {
+                StatusBits.write(currentStatusBits, io.core, Bool(false))
+
+            }.otherwise {
+                location := StatusBits.makeWrittenBefore(currentStatusBits, io.core)
             }
         }
     }
@@ -239,24 +235,13 @@ class TransSpm(
         statusBits(statusBitsAddr)
     }
 
-    def doCommit(core :UInt, currAddr :UInt) = {
-        for (addr <- 0 until statusBitsSize) {
-            val location = statusBits(UInt(addr))
-            location := Mux(UInt(addr) === currAddr,
-                StatusBits.write(currentStatusBits, io.core),
-                StatusBits.makeWritten(location, core))
-        }
+    def isInCommit(coreState :Bits, core :Int) = {
+        coreState === WRITTEN_IN_COMMIT
     }
 
-    // val collectCoresState = Vec.tabulate (nrCores) (core => {
-    //     val allRightBits = (0 until statusBitsSize).map(UInt(_))
-    //         .map(addr => {
-    //             val statusBits = statusBits(addr)
-    //             val coreState = StatusBits.get(statusBits, core)
-    //             coreState(1)
-    //         })
-    //     orAll(allLeftBits) === Bits(0)
-    // })
+    def isUncommitted(coreState :Bits, core :Int) = {
+        inCommit(core) && coreState === UNTOUCHED_SINCE_START
+    }
 }
 
 object TransSpm {
@@ -271,10 +256,13 @@ class TransSpmTester(dut: TransSpm) extends Tester(dut) {
   println("Transactional SPM Tester")
 
   def read(addr: Int) = {
+    println("---------------------------")
     poke(dut.io.slave.M.Addr, addr)
     poke(dut.io.slave.M.Cmd, 2) // OcpCmd.RD
     peek(dut.io.db)
     peek(dut.io.location)
+    peek(dut.io.commits)
+    peek(dut.io.written)
     step(1)
     poke(dut.io.slave.M.Cmd, 0) // OcpCmd.IDLE
     while (peek(dut.io.slave.S.Resp) != 1) {
@@ -282,17 +270,22 @@ class TransSpmTester(dut: TransSpm) extends Tester(dut) {
     }
     peek(dut.io.db)
     peek(dut.io.location)
+    peek(dut.io.commits)
+    peek(dut.io.written)
     peek(dut.io.slave.S.Data)
     dut.io.slave.S.Data
   }
 
   def write(addr: Int, data: Int) = {
+    println("---------------------------")
     poke(dut.io.slave.M.Addr, addr)
     poke(dut.io.slave.M.Data, data)
     poke(dut.io.slave.M.Cmd, 1) // OcpCmd.WR
     poke(dut.io.slave.M.ByteEn, 0x0f)
     peek(dut.io.db)
     peek(dut.io.location)
+    peek(dut.io.commits)
+    peek(dut.io.written)
     step(1)
     poke(dut.io.slave.M.Cmd, 0) // OcpCmd.IDLE
     while (peek(dut.io.slave.S.Resp) != 1) {
@@ -300,6 +293,8 @@ class TransSpmTester(dut: TransSpm) extends Tester(dut) {
     }
     peek(dut.io.db)
     peek(dut.io.location)
+    peek(dut.io.commits)
+    peek(dut.io.written)
     peek(dut.io.slave.S.Data)
     dut.io.slave.S.Data
   }
@@ -307,9 +302,6 @@ class TransSpmTester(dut: TransSpm) extends Tester(dut) {
   poke(dut.io.core, 0)
 
   // Basic read-write test
-  // for (i <- 0.until(1024, GRANULARITY)) {
-  //   read(i)
-  // }
   for (i <- 0.until(1024, GRANULARITY)) {
     expect(write(i, i * 0x100 + 0xa), 0)
   }
