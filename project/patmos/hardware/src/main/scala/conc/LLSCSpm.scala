@@ -12,40 +12,70 @@ import ocp._
 import patmos._
 import patmos.Constants._
 
-object DirtyBits {
-    val PRISTINE = Bits(0, width = 1)
-    val DIRTY = Bits(1, width = 1)
+class DirtyBits (
+    nrCores :Int,
+    size :Int
+) extends Module {
+    import DirtyBits._
 
-    def apply(nrCores :Int) = {
-        val location = Bits()
-        location := Fill(nrCores, PRISTINE)
+    val io = new Bundle() {
+        val addr = Bits(INPUT, log2Up(size))
+        val core = Bits(INPUT, log2Up(nrCores))
+        val dva = Bool(INPUT)
+        val data = Bits(INPUT, 1)
+        val coreBit = Bits(OUTPUT, 1)
+    }
+
+    // Dirty bits
+    val dirtyBits = Mem(makeInitLocation(nrCores), size)
+
+    val location = dirtyBits(io.addr)
+    val coreBit = (location.toUInt >> io.core)(0)
+
+    // Read
+    io.coreBit := coreBit
+
+    // Write
+    when (io.dva) {
+        switch (io.data) {
+
+            // Making the bit for the core pristine
+            is (PRISTINE) {
+                val mask = ~(UInt(1) << io.core)
+                location := location & mask
+            }
+
+            // Making the bits dirty for every core
+            is (DIRTY) {
+                location := Fill(nrCores, DIRTY)
+            }
+        }
+    }
+}
+
+object DirtyBits {
+    val PRISTINE = Bits(0)
+    val DIRTY = Bits(1)
+
+    def apply(nrCores :Int, size: Int) = {
+        Module(new DirtyBits(nrCores, size))
+    }
+
+    def makeInitLocation(nrCores :Int) = {
+        val location = Fill(nrCores, PRISTINE)
         location.setWidth(nrCores)
         location
     }
-
-    def get(location :Bits, index :UInt) = {
-        (location.toUInt >> index)(0)
-    }
-
-    def makeDirty(location :Bits) = {
-        val newLocation = location
-        newLocation := Fill(location.getWidth, DIRTY)
-        newLocation
-    }
-
-    def makePristine(location :Bits, index :UInt) = {
-        val mask = ~(UInt(1, width = 1) << index)
-        location & mask
-    }
 }
-class DirtyBits
-
 
 class LLSCSpm(
     val granularity :Int,
     nrCores: Int,
     size: Int
 ) extends Module {
+    import DirtyBits._
+    import LLSCSpm._
+
     if (!isPow2 (granularity)) {
         sys.error (s"LLSCSpm: granularity must be a power of 2, but $granularity was provided.")
     }
@@ -71,12 +101,14 @@ class LLSCSpm(
         mem(i) = MemBlock(size / BYTES_PER_WORD, BYTE_WIDTH, bypass = false).io
     }
 
-    // Dirty bits
-    val dirtyBits = Mem(DirtyBits(nrCores), size / granularity)
+    val dirtyBits = DirtyBits(nrCores, size / granularity)
 
-    val currDirtyBits = getDirtyBits(io.slave.M.Addr)
-    val isPristine = DirtyBits.get(currDirtyBits, io.core) ===
-            DirtyBits.PRISTINE
+    dirtyBits.io.addr := io.slave.M.Addr >> log2Up(granularity)
+    dirtyBits.io.core := io.core
+    dirtyBits.io.dva := Bool(false)
+    dirtyBits.io.data := Bits(0)
+
+    val isPristine = dirtyBits.io.coreBit === PRISTINE
     val shouldWrite = io.slave.M.Cmd === OcpCmd.WR && isPristine
 
     val cmdReg = Reg(next = io.slave.M.Cmd)
@@ -97,26 +129,29 @@ class LLSCSpm(
 
     switch (io.slave.M.Cmd) {
         is (OcpCmd.RD) {
-            currDirtyBits := DirtyBits.makePristine(currDirtyBits, io.core)
+            dirtyBits.io.dva := Bool(true)
+            dirtyBits.io.data := PRISTINE
         }
 
         is (OcpCmd.WR) {
             when (isPristine) {
-                currDirtyBits := DirtyBits.makeDirty(currDirtyBits)
-                dataReg := Bits(0, width = DATA_WIDTH)
+                dirtyBits.io.dva := Bool(true)
+                dirtyBits.io.data := DIRTY
+
+                dataReg := Result.SUCCESS
             }.otherwise {
-                dataReg := Bits(1, width = DATA_WIDTH)
+                dataReg := Result.FAIL
             }
         }
-    }
-
-    def getDirtyBits(address :UInt) = {
-        val dirtyBitAddr = address >> log2Up(granularity)
-        dirtyBits(dirtyBitAddr)
     }
 }
 
 object LLSCSpm {
+    object Result {
+        val SUCCESS = Bits(0)
+        val FAIL = Bits(1)
+    }
+
     def apply(granularity :Int, nrCores: Int, size: Int) = {
         Module(new LLSCSpm(granularity, nrCores, size))
     }
