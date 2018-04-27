@@ -91,11 +91,6 @@ class TransSpm(
     val io = new Bundle() {
         val slave = new OcpCoreSlavePort(ADDR_WIDTH, DATA_WIDTH)
         val core = UInt(INPUT, log2Up(nrCores))
-
-        val commits = Bits(OUTPUT, 8)
-        val location = Bits(OUTPUT, 8)
-        val db = Bits(OUTPUT, 2)
-        val written = Bits(OUTPUT, 1)
     }
 
     val addrBits = log2Up(size / BYTES_PER_WORD)
@@ -129,11 +124,6 @@ class TransSpm(
     val currentStatusBits = getStatusBits(io.slave.M.Addr)
 
     val shouldWrite = io.slave.M.Cmd === OcpCmd.WR && allUntouched(io.core)
-
-    io.db := Bits(0)
-    io.location := Bits(0)
-    io.commits := Bits(0)
-    io.written := Bits(0)
 
     val cmdReg = Reg(next = io.slave.M.Cmd)
     val dataReg = RegInit(io.slave.M.Data)
@@ -190,23 +180,15 @@ class TransSpmTester(dut: TransSpm) extends Tester(dut) {
   println("Transactional SPM Tester")
 
   // Response defaults ot OcpResp.DVA
-  def read(addr: Int, resp :Int = 1) = {
+  def read(addr: Int) = {
     println("---------------------------")
     poke(dut.io.slave.M.Addr, addr)
     poke(dut.io.slave.M.Cmd, 2) // OcpCmd.RD
-    peek(dut.io.db)
-    peek(dut.io.location)
-    peek(dut.io.commits)
-    peek(dut.io.written)
     step(1)
     poke(dut.io.slave.M.Cmd, 0) // OcpCmd.IDLE
-    while (peek(dut.io.slave.S.Resp) != resp) {
+    while (peek(dut.io.slave.S.Resp) != 1) {
       step(1)
     }
-    peek(dut.io.db)
-    peek(dut.io.location)
-    peek(dut.io.commits)
-    peek(dut.io.written)
     peek(dut.io.slave.S.Data)
     dut.io.slave.S.Data
   }
@@ -217,19 +199,11 @@ class TransSpmTester(dut: TransSpm) extends Tester(dut) {
     poke(dut.io.slave.M.Data, data)
     poke(dut.io.slave.M.Cmd, 1) // OcpCmd.WR
     poke(dut.io.slave.M.ByteEn, 0x0f)
-    peek(dut.io.db)
-    peek(dut.io.location)
-    peek(dut.io.commits)
-    peek(dut.io.written)
     step(1)
     poke(dut.io.slave.M.Cmd, 0) // OcpCmd.IDLE
     while (peek(dut.io.slave.S.Resp) != 1) {
       step(1)
     }
-    peek(dut.io.db)
-    peek(dut.io.location)
-    peek(dut.io.commits)
-    peek(dut.io.written)
     peek(dut.io.slave.S.Data)
     dut.io.slave.S.Data
   }
@@ -286,32 +260,6 @@ class TransSpmTester(dut: TransSpm) extends Tester(dut) {
   for (addr <- 0 until(256, GRANULARITY)) {
       expect(write(addr, 0xFF), 1)
   }
-
-  // // Commits can not overlap
-  // poke(dut.io.core, 0)
-  // for (addr <- 0 until(256, GRANULARITY)) {
-  //     read(addr)
-  // }
-
-  // for (addr <- 0 until(128, GRANULARITY)) {
-  //     expect(write(addr, 0xFF), 0)
-  // }
-
-  // Already committed by core 0
-  // poke(dut.io.core, 1)
-  // for (addr <- 0 until(128, GRANULARITY)) {
-  //     expect(write(addr, 0xFF), 1)
-  // }
-
-  // Not yet committed by core 0
-  // for (addr <- 128 until(256, GRANULARITY)) {
-  //     expect(write(addr, 0xFF), 1)
-  // }
-
-  // Reading uncommitted variables should also fail
-  // for (addr <- 128 until(256, GRANULARITY)) {
-  //     read(addr, 2)
-  // }
 }
 
 object TransSpmTester {
