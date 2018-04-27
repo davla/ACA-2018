@@ -165,8 +165,7 @@ class TransSpm(
     // read locations have been written to, marking the end of a commit. The
     // masking of the current location assumes a write in that location in the
     // current cycle.
-    val allWritten = ~((allRightBits(io.core) & ~(UInt(1) << io.slave.M.Addr))
-            .orR)
+    val allWritten = allRightBits(io.core).orR === Bits(1) && (allRightBits(io.core) & ~(UInt(1) << io.slave.M.Addr)).orR === Bits(0)
 
     // Commit bits
     val inCommit = RegInit(Bits(0, width = nrCores))
@@ -188,6 +187,7 @@ class TransSpm(
     io.written := allWritten
 
     val cmdReg = Reg(next = io.slave.M.Cmd)
+    val respReg = Reg(init = OcpResp.NULL, next = OcpResp.NULL)
     val dataReg = RegInit(io.slave.M.Data)
 
     // store
@@ -200,22 +200,25 @@ class TransSpm(
     // Concatenates output from the memory blocks
     val rdData = mem.map(_(io.slave.M.Addr(addrBits + 1, 2))).reduceLeft((x,y) => y ## x)
 
-    io.slave.S.Resp := Mux(cmdReg === OcpCmd.WR || cmdReg === OcpCmd.RD,
-        OcpResp.DVA, OcpResp.NULL)
+    io.slave.S.Resp := respReg
     io.slave.S.Data := Mux(cmdReg === OcpCmd.RD, rdData, dataReg)
 
     switch (io.slave.M.Cmd) {
         is (OcpCmd.RD) {
             when (canRead) {
+                respReg := OcpResp.DVA
                 currentStatusBits := StatusBits.makeUntouched(currentStatusBits, io.core)
+            }.otherwise {
+                respReg := OcpResp.FAIL
             }
         }
 
         is (OcpCmd.WR) {
+            respReg := OcpResp.DVA
+
             when (canWrite) {
                 when (allWritten) {
                     doCommit(io.core, io.slave.M.Addr >> log2Up(granularity))
-                    // currentStatusBits := StatusBits.write(currentStatusBits, io.core, Bool(false))
                 }.otherwise {
                     currentStatusBits := StatusBits.write(currentStatusBits, io.core, Bool(true))
                 }
@@ -266,7 +269,8 @@ class TransSpmTester(dut: TransSpm) extends Tester(dut) {
 
   println("Transactional SPM Tester")
 
-  def read(addr: Int) = {
+  // Response defaults ot OcpResp.DVA
+  def read(addr: Int, resp :Int = 1) = {
     println("---------------------------")
     poke(dut.io.slave.M.Addr, addr)
     poke(dut.io.slave.M.Cmd, 2) // OcpCmd.RD
@@ -276,7 +280,7 @@ class TransSpmTester(dut: TransSpm) extends Tester(dut) {
     peek(dut.io.written)
     step(1)
     poke(dut.io.slave.M.Cmd, 0) // OcpCmd.IDLE
-    while (peek(dut.io.slave.S.Resp) != 1) {
+    while (peek(dut.io.slave.S.Resp) != resp) {
       step(1)
     }
     peek(dut.io.db)
@@ -369,85 +373,25 @@ class TransSpmTester(dut: TransSpm) extends Tester(dut) {
       read(addr)
   }
 
-  poke(dut.io.core, 1)
-  for (addr <- 0 until(256, GRANULARITY)) {
-      read(addr)
-  }
-
-  poke(dut.io.core, 0)
-  for (addr <- 0 until(128, GRANULARITY)) {
-      expect(write(addr, 0xFF), 0)
-  }
+  // for (addr <- 0 until(128, GRANULARITY)) {
+  //     expect(write(addr, 0xFF), 0)
+  // }
 
   // Already committed by core 0
-  poke(dut.io.core, 1)
-  for (addr <- 0 until(128, GRANULARITY)) {
-      expect(write(addr, 0xFF), 1)
-  }
+  // poke(dut.io.core, 1)
+  // for (addr <- 0 until(128, GRANULARITY)) {
+  //     expect(write(addr, 0xFF), 1)
+  // }
 
   // Not yet committed by core 0
-  for (addr <- 128 until(256, GRANULARITY)) {
-      expect(write(addr, 0xFF), 1)
-  }
-
-  // Write to the same memory location without reading in between should fail
-  // expect(write(0, 0xFF), 0)
-  // expect(write(0, 0xF0), 1)
-  //
-  // // Failed writes should not affect memory
-  // expect(read(0), 0xFF)
-  //
-  // // Write to the same memory location with a read from the same core in
-  // expect(write(0, 0xFF), 0)
-  // expect(read(0), 0xFF)
-  // expect(write(0, 0xF0), 0)
-  //
-  // // Write to memory in the same granularity block should fail
-  // if (GRANULARITY != 1) {
-  //     expect(write(GRANULARITY * 9, 0xFF), 0)
-  //     expect(write(GRANULARITY * 9 + 1, 0xF0), 1)
+  // for (addr <- 128 until(256, GRANULARITY)) {
+  //     expect(write(addr, 0xFF), 1)
   // }
-  //
-  // // Write to memory in different granularity blocks should succeed
-  // expect(write(GRANULARITY * 5, 0xFF), 0)
-  // expect(write(GRANULARITY * 3, 0xF0), 0)
-  //
-  // // Write frrom a different core should invalidate subsequent writes
-  // // from other cores
-  // poke(dut.io.core, 0)
-  // read(GRANULARITY * 8)
-  // poke(dut.io.core, 1)
-  // read(GRANULARITY * 8)
-  // expect(write(GRANULARITY * 8, 0xF0), 0)
-  // poke(dut.io.core, 0)
-  // expect(write(GRANULARITY * 8, 0xFF), 1)
-  //
-  // // The first write after a read shoudl always succeed
-  // poke(dut.io.core, 0)
-  // read(GRANULARITY * 8)
-  // poke(dut.io.core, 1)
-  // read(GRANULARITY * 8)
-  // expect(write(GRANULARITY * 8, 0xF0), 0)
-  // poke(dut.io.core, 0)
-  // expect(read(GRANULARITY * 8), 0xF0)
-  // expect(write(GRANULARITY * 8, 0xFF), 0)
-  //
-  // // Unlike CAS, LL/SC doesn't siffer the ABA problem
-  // val aValue = 0x19
-  // val bValue = 0x84
-  //
-  // poke(dut.io.core, 0)
-  // read(GRANULARITY * 8)                     // So that next write doesn't fail
-  // expect(write(GRANULARITY * 8, aValue), 0) // a value is written by core 0
-  // expect(read(GRANULARITY * 8), aValue)     // a value is read
-  //
-  // poke(dut.io.core, 1)
-  // expect(read(GRANULARITY * 8), aValue)     // So that next write doesn't fail
-  // expect(write(GRANULARITY * 8, bValue), 0) // value b is written by core 1
-  // expect(read(GRANULARITY * 8), bValue)     // So that next write doesn't fail
-  // expect(write(GRANULARITY * 8, aValue), 0) // vaue a is written again by core 1
-  // poke(dut.io.core, 0)
-  // expect(write(GRANULARITY * 8, 0xFF), 1)   // Store Conditional fails
+
+  // Reading uncommitted variables should also fail
+  // for (addr <- 128 until(256, GRANULARITY)) {
+  //     read(addr, 2)
+  // }
 }
 
 object TransSpmTester {
