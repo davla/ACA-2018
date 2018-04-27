@@ -14,15 +14,15 @@ import patmos._
 import patmos.Constants._
 
 object StatusBits {
-    val WRITTEN_BEFORE_START = Bits("b00")  //initial state
-    val UNTOUCHED_SINCE_START = Bits("b01")
-    val WRITTEN_AFTER_START = Bits("b11")
+    val NOT_IN_TRANSACTION = Bits("b00")  //initial state
+    val PRISTINE = Bits("b01")
+    val DIRTY = Bits("b11")
 
-    val stateWidth = WRITTEN_BEFORE_START.getWidth
+    val stateWidth = DIRTY.getWidth
     val indexShift = log2Up(stateWidth)
 
     def apply(nrCores :Int) = {
-        val location = Fill(nrCores, WRITTEN_BEFORE_START)
+        val location = Fill(nrCores, NOT_IN_TRANSACTION)
         location.setWidth(nrCores * stateWidth)
         location
     }
@@ -37,13 +37,17 @@ object StatusBits {
         location(end, start)
     }
 
-    def makeWrittenBefore(location: Bits, index :UInt) = {
+    def get(location :Bits, index :UInt) = {
+        (location.toUInt >> (index << indexShift))(1, 0)
+    }
+
+    def makeNotInTransaction(location: Bits, index :UInt) = {
         val andBitMask = ~(UInt("b11") << (index << indexShift))
         val orBitMask = UInt(0)
         applyBitMask(location, andBitMask, orBitMask)
     }
 
-    def makeUntouched(location :Bits, index :UInt) = {
+    def makePristine(location :Bits, index :UInt) = {
         val andBitMask = ~(UInt(1) << ((index << indexShift) + UInt(1)))
         val orBitMask = UInt(1) << (index << indexShift)
         applyBitMask(location, andBitMask, orBitMask)
@@ -52,15 +56,15 @@ object StatusBits {
     def write(location :Bits, core :UInt) = {
         val nrCores = location.getWidth / stateWidth
 
-        val thisCoreSet = makeWrittenBefore(location, core)
+        val thisCoreSet = makeNotInTransaction(location, core)
 
         val newStates = new Array[Bits](nrCores)
         for (k <- 0 until nrCores) {
             val coreState = get(thisCoreSet, k)
-            val isUntouched = coreState === UNTOUCHED_SINCE_START
+            val isUntouched = coreState === PRISTINE
 
             // Status bits are reversed
-            newStates(nrCores - 1 - k) = Mux(isUntouched, WRITTEN_AFTER_START,
+            newStates(nrCores - 1 - k) = Mux(isUntouched, DIRTY,
                 coreState)
         }
 
@@ -123,7 +127,9 @@ class TransSpm(
 
     val currentStatusBits = getStatusBits(io.slave.M.Addr)
 
-    val shouldWrite = io.slave.M.Cmd === OcpCmd.WR && allUntouched(io.core)
+    val notInTransaction = get(currentStatusBits, io.core) === NOT_IN_TRANSACTION
+
+    val shouldWrite = io.slave.M.Cmd === OcpCmd.WR && (notInTransaction || allUntouched(io.core))
 
     val cmdReg = Reg(next = io.slave.M.Cmd)
     val dataReg = RegInit(io.slave.M.Data)
@@ -144,7 +150,7 @@ class TransSpm(
 
     switch (io.slave.M.Cmd) {
         is (OcpCmd.RD) {
-            currentStatusBits := StatusBits.makeUntouched(currentStatusBits, io.core)
+            currentStatusBits := StatusBits.makePristine(currentStatusBits, io.core)
         }
 
         is (OcpCmd.WR) {

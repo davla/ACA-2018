@@ -12,11 +12,24 @@ import ocp._
 import patmos._
 import patmos.Constants._
 
+//Dirtybits class creates a dirty bit for each core at every addressable memory
+//location. These dirty bits are a fundemental part of our Load-Link
+//Store-Conditional protocol as they determine a cores permission to write
+//to a specific memory location.
 class DirtyBits (
     nrCores :Int,
     size :Int
 ) extends Module {
     import DirtyBits._
+
+    /*
+      addr     : the address of the memory with the width of logarithm 2 of the size
+      core     : the core is encoded with the bits logarithm 2 of the core
+      wrEnable : write enable to allowing for the writing of the dirtybits
+      data     : the "data" is the input status of each dirty bit for the cores
+      coreBit  : the "coreBit" is the output status of each dirty bit for the cores
+
+    */
 
     val io = new Bundle() {
         val addr = Bits(INPUT, log2Up(size))
@@ -27,6 +40,7 @@ class DirtyBits (
     }
 
     // Dirty bits
+    // initialize hardware memory for number of cores dirty bits with desired size
     val dirtyBits = Mem(makeInitLocation(nrCores), size)
 
     val location = dirtyBits(io.addr)
@@ -35,17 +49,29 @@ class DirtyBits (
     // Read
     io.coreBit := coreBit
 
-    // Write
+    // Write: when the dirtybit write enable signal is high either of the
+    //        following can occur, either a dirty bit is written to pristine
+    //        on a read command, or all dirty bits are written to dirty on a
+    //        writie command.
     when (io.wrEnable) {
         switch (io.data) {
 
             // Making the bit for the core pristine
+            // the mask is used for shift the pristine status bits to the
+            // correseponding bit posintion e.g
+            // if io.core == b100 (log2up(4)) then
+            //    mask = shift left 2 position with 0
             is (PRISTINE) {
                 val mask = ~(UInt(1) << io.core)
                 location := location & mask
             }
 
             // Making the bits dirty for every core
+            // with a write command, all cores dirtybits are set as dirty, since
+            // after writing to the memory at the location has been changed, so
+            // any cores who have read (their dirty bit is pristine) will have
+            // their dirty bit set to dirty informing them that the address
+            // has been written to.
             is (DIRTY) {
                 location := Fill(nrCores, DIRTY)
             }
@@ -53,14 +79,21 @@ class DirtyBits (
     }
 }
 
+/*
+* The scala thing static field and functions only can be seen in this file.
+*/
+//The DirtyBits values are specified with 0 indicating Pristine and 1 Dirty
 object DirtyBits {
     val PRISTINE = Bits(0)
     val DIRTY = Bits(1)
 
+    //DirtyBits are applied to each memory address for each core.
     def apply(nrCores :Int, size: Int) = {
         Module(new DirtyBits(nrCores, size))
     }
 
+    //All DirtyBits for each core and address are initalised as Pristine, since
+    //no cores have initally written to memory.
     def makeInitLocation(nrCores :Int) = {
         val location = Fill(nrCores, PRISTINE)
         location.setWidth(nrCores)
@@ -68,14 +101,25 @@ object DirtyBits {
     }
 }
 
+/*
+* A special scratchpad memory is created to perform the hardware support load
+* linked store conditianl protocol. This implementation requires no new
+* instructions for the instruction set since all normal read and write commands
+* to the LLSCSpm will be either load linked reads or store conditional writes.
+*/
+
 class LLSCSpm(
+    //The granularity specifies the amount of memory assigned to a set of
+    //DirtyBits. For instances a set DirtyBits for each core could cover a byte,
+    //a word, a double word etc.
     val granularity :Int,
-    nrCores: Int,
-    size: Int
+    nrCores: Int,           //number of cores
+    size: Int               //size of each core memory
 ) extends Module {
     import DirtyBits._
     import LLSCSpm._
 
+    // memory coherence error checks.
     if (!isPow2 (granularity)) {
         sys.error (s"LLSCSpm: granularity must be a power of 2, but $granularity was provided.")
     }
@@ -88,11 +132,16 @@ class LLSCSpm(
         sys.error (s"LLSCSpm: granularity has to be less than size, but granularity $granularity and size $size were provided.")
     }
 
+    /*
+    Open core protocol io bundle
+    */
+
     val io = new Bundle() {
         val slave = new OcpCoreSlavePort(ADDR_WIDTH, DATA_WIDTH)
         val core = UInt(INPUT, log2Up(nrCores))
     }
 
+    //binary value of the SPM address
     val addrBits = log2Up(size / BYTES_PER_WORD)
 
     // generate byte memories
@@ -100,21 +149,40 @@ class LLSCSpm(
     for (i <- 0 until BYTES_PER_WORD) {
         mem(i) = MemBlock(size / BYTES_PER_WORD, BYTE_WIDTH, bypass = false).io
     }
-
+    //A DirtyBits class is created with the number of cores and the number of
+    //memory addresses being watched by a set of dirtybits.
     val dirtyBits = DirtyBits(nrCores, size / granularity)
 
+    //The values of the DirtyBits class are initialised.
+    //Address is shifted by the granularity since a set of DirtyBits covers,
+    //multiple memory locations.
     dirtyBits.io.addr := io.slave.M.Addr >> log2Up(granularity)
-    dirtyBits.io.core := io.core
-    dirtyBits.io.wrEnable := Bool(false)
-    dirtyBits.io.data := Bits(0)
+    dirtyBits.io.core := io.core // the cores are set.
+    dirtyBits.io.wrEnable := Bool(false) //write enable is false.
+    dirtyBits.io.data := Bits(0) //dirtybits are set to pristine.
+
+    /* check of dirtry bits status:
+    if the dirty bit status of memory is prestine then return ture
+    else return false
+    */
 
     val isPristine = dirtyBits.io.coreBit === PRISTINE
+
+    /* To check whether can write to the memory
+    if OcpCmd is write command and the dirty bit status of memory is prestine
+    then return true else return false
+    */
     val shouldWrite = io.slave.M.Cmd === OcpCmd.WR && isPristine
 
+    /* To connect with the Ocp slave */
     val cmdReg = Reg(next = io.slave.M.Cmd)
     val dataReg = RegInit(io.slave.M.Data)
 
-    // store
+    // store conditional
+    /*
+       To perform the store conditional with checking should the address is
+       allowed to be written
+    */
     val stmsk = Mux(shouldWrite, io.slave.M.ByteEn, Bits(0))
     for (i <- 0 until BYTES_PER_WORD) {
         mem(i) <= (stmsk(i), io.slave.M.Addr(addrBits + 1, 2),
@@ -123,16 +191,32 @@ class LLSCSpm(
 
     val rdData = mem.map(_(io.slave.M.Addr(addrBits + 1, 2))).reduceLeft((x,y) => y ## x)
 
+    /* slave response
+       mutilplexed by Ocp write || read
+       if the command is write || read holds then DVA, else null
+    */
     io.slave.S.Resp := Mux(cmdReg === OcpCmd.WR || cmdReg === OcpCmd.RD,
         OcpResp.DVA, OcpResp.NULL)
+    /* slave data
+       mutilplexed by Ocp read
+       if the command is read holds then rdData, else dataReg
+    */
     io.slave.S.Data := Mux(cmdReg === OcpCmd.RD, rdData, dataReg)
 
     switch (io.slave.M.Cmd) {
+      //For a read command write enable is set to true and then the dirty bit
+      //for the reading core is set to pristine at the address of the read
+      //command. No conditions need to be checked since a read command is
+      //always possible
         is (OcpCmd.RD) {
             dirtyBits.io.wrEnable := Bool(true)
             dirtyBits.io.data := PRISTINE
         }
-
+        //When a core attempts a write command we must first check if that cores
+        //dirty bit is still pristine meaning that no other cores have written
+        //to that address. If that condition is satisfied write enable is set to
+        //true to allow for all cores dirtybits to be set to dirty using DIRTY.
+        //The result is reported as either a success or a failure.
         is (OcpCmd.WR) {
             when (isPristine) {
                 dirtyBits.io.wrEnable := Bool(true)
