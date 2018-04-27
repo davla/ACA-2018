@@ -21,7 +21,7 @@ class DirtyBits (
     val io = new Bundle() {
         val addr = Bits(INPUT, log2Up(size))
         val core = Bits(INPUT, log2Up(nrCores))
-        val dva = Bool(INPUT)
+        val wrEnable = Bool(INPUT)
         val data = Bits(INPUT, 1)
         val coreBit = Bits(OUTPUT, 1)
     }
@@ -36,7 +36,7 @@ class DirtyBits (
     io.coreBit := coreBit
 
     // Write
-    when (io.dva) {
+    when (io.wrEnable) {
         switch (io.data) {
 
             // Making the bit for the core pristine
@@ -105,7 +105,7 @@ class LLSCSpm(
 
     dirtyBits.io.addr := io.slave.M.Addr >> log2Up(granularity)
     dirtyBits.io.core := io.core
-    dirtyBits.io.dva := Bool(false)
+    dirtyBits.io.wrEnable := Bool(false)
     dirtyBits.io.data := Bits(0)
 
     val isPristine = dirtyBits.io.coreBit === PRISTINE
@@ -129,13 +129,13 @@ class LLSCSpm(
 
     switch (io.slave.M.Cmd) {
         is (OcpCmd.RD) {
-            dirtyBits.io.dva := Bool(true)
+            dirtyBits.io.wrEnable := Bool(true)
             dirtyBits.io.data := PRISTINE
         }
 
         is (OcpCmd.WR) {
             when (isPristine) {
-                dirtyBits.io.dva := Bool(true)
+                dirtyBits.io.wrEnable := Bool(true)
                 dirtyBits.io.data := DIRTY
 
                 dataReg := Result.SUCCESS
