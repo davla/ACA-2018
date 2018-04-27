@@ -13,26 +13,97 @@ import ocp._
 import patmos._
 import patmos.Constants._
 
-object StatusBits {
-    val WRITTEN_BEFORE_START = Bits("b00")  //initial state
-    val UNTOUCHED_SINCE_START = Bits("b01")
-    val WRITTEN_AFTER_START = Bits("b11")
-    val WRITTEN_IN_COMMIT = Bits("b10")
+class StatusBits (
+    nrCores :Int,
+    size :Int
+) extends Module {
+    import StatusBits._
 
-    val stateWidth = WRITTEN_BEFORE_START.getWidth
-    val indexShift = log2Up(stateWidth)
-
-    def apply(nrCores :Int) = {
-        val location = Bits()
-        location := Fill(nrCores, WRITTEN_BEFORE_START)
-        location
+    val io = new Bundle() {
+        val addr = Bits(INPUT, log2Up(size))
+        val core = Bits(INPUT, log2Up(nrCores))
+        val dva = Bool(INPUT)
+        val data = Bits(INPUT, stateWidth)
+        val canRead = Bits(OUTPUT, 1)
+        val canWrite = Bits(OUTPUT, 1)
+        val allWritten = Bits(OUTPUT, 1)
     }
 
-    def applyBitMask(location :Bits, andMask :Bits, orMask :Bits) = {
+    // Status bits
+    val statusBits = Vec.fill(size)(RegInit(Fill(nrCores, WRITTEN_BEFORE_START)))
+
+    // Each of the OR gates here has as input the left bit of a core state
+    // for every location. It is used to check whether any location is in the
+    // WRITTEN_AFTER_START state. It is ignored during commits, that is the
+    // only moment in which the state can be WRITTEN_IN_COMMIT
+    val allUntouchedArr = new Array[Bool](nrCores)
+    for (core <- 0 until nrCores) {
+        val leftBits = new Array[Bits](statusBitsSize)
+        for (addr <- 0 until statusBitsSize) {
+            val location = statusBits(addr)
+            val coreState = StatusBits.get(location, core)
+            leftBits(addr) = coreState(1)
+        }
+        allUntouchedArr(core) = orAll(leftBits) === Bits(0)
+    }
+    val allUntouched = Vec(allUntouchedArr)
+
+    // Each of these bit-strings is the concatenation of the right bit of a
+    // core state for every location. As explained below, they are used to
+    // detect the end of a commit
+    val allRightBitsArr = new Array[Bits](nrCores)
+    for (core <- 0 until nrCores) {
+        val rightBits = new Array[Bits](statusBitsSize)
+        for (addr <- 0 until statusBitsSize) {
+            val location = statusBits(addr)
+            val coreState = StatusBits.get(location, core)
+            rightBits(addr) = coreState(0)
+        }
+        allRightBitsArr(core) = catAll(rightBits)
+    }
+    val allRightBits = Vec(allRightBitsArr)
+
+    // After masking the bit for the current location, the negation of the
+    // recursive OR of the bit strings for this core tells whether all the
+    // read locations have been written to, marking the end of a commit. The
+    // masking of the current location assumes a write in that location in the
+    // current cycle.
+    io.allWritten := ~((allRightBits(io.core) & ~(UInt(1) << io.addr)).orR)
+
+    val location = statusBits(io.addr)
+
+    val hasUncommitted = StatusBits.orMap(location, isUncommitted _)
+    val hasInCommit = StatusBits.orMap(location, isInCommit _)
+    val committingHere = hasUncommitted || hasInCommit
+
+    io.canRead := ~hasUncommitted
+    io.canWrite := ~committingHere && (inCommit(io.core) || allUntouched(io.core))
+
+    when (io.dva) {
+        switch (io.data) {
+            is (UNTOUCHED_SINCE_START) {
+                makeUntouched()
+            }
+
+            is (WRITTEN_IN_COMMIT) {
+                for (addr <- 0 until size) {
+                    val thisLocation = statusBits(size)
+
+                    when (UInt(addr) === io.addr) {
+                        thisLocation := write(thisLocation, io.core, Bool(false))
+
+                    }.otherwise {
+                        makeWrittenBefore(thisLocation, io.core)
+                    }
+            }
+        }
+    }
+
+    def applyBitMask(andMask :Bits, orMask :Bits) = {
         (location & andMask) | orMask
     }
 
-    def get(location :Bits, index :Int) = {
+    def getCoreState(index :Int location :Bits = this.location) = {
         val start = index * stateWidth
         val end = start + stateWidth - 1
         location(end, start)
@@ -50,10 +121,26 @@ object StatusBits {
         applyBitMask(location, andBitMask, orBitMask)
     }
 
-    def makeUntouched(location :Bits, index :UInt) = {
-        val andBitMask = ~(UInt(1) << ((index << indexShift) + UInt(1)))
-        val orBitMask = UInt(1) << (index << indexShift)
-        applyBitMask(location, andBitMask, orBitMask)
+
+    def makeUntouched = {
+        val andBitMask = ~(UInt(1) << ((io.core << indexShift) + UInt(1)))
+        val orBitMask = UInt(1) << (io.core << indexShift)
+        location := applyBitMask(location, andBitMask, orBitMask)
+    }
+
+}
+
+object StatusBits {
+    val WRITTEN_BEFORE_START = Bits("b00")  //initial state
+    val UNTOUCHED_SINCE_START = Bits("b01")
+    val WRITTEN_AFTER_START = Bits("b11")
+    val WRITTEN_IN_COMMIT = Bits("b10")
+
+    val stateWidth = WRITTEN_BEFORE_START.getWidth
+    val indexShift = log2Up(stateWidth)
+
+    def apply(nrCores :Int, size :Int) = {
+        Module(new StatusBits(nrCores, size))
     }
 
     def orMap(location :Bits, f :(Bits, Int) => Bool) = {
@@ -127,65 +214,20 @@ class TransSpm(
     }
 
     // Status bits
-    val statusBits = Vec.fill(statusBitsSize)(RegInit(StatusBits(nrCores)))
+    val statusBits = StatusBits(nrCores, statusBitsSize)
 
-    // Each of the OR gates here has as input the left bit of a core state
-    // for every location. It is used to check whether any location is in the
-    // WRITTEN_AFTER_START state. It is ignored during commits, that is the
-    // only moment in which the state can be WRITTEN_IN_COMMIT
-    val allUntouchedArr = new Array[Bool](nrCores)
-    for (core <- 0 until nrCores) {
-        val leftBits = new Array[Bits](statusBitsSize)
-        for (addr <- 0 until statusBitsSize) {
-            val location = statusBits(addr)
-            val coreState = StatusBits.get(location, core)
-            leftBits(addr) = coreState(1)
-        }
-        allUntouchedArr(core) = orAll(leftBits) === Bits(0)
-    }
-    val allUntouched = Vec(allUntouchedArr)
-
-    // Each of these bit-strings is the concatenation of the right bit of a
-    // core state for every location. As explained below, they are used to
-    // detect the end of a commit
-    val allRightBitsArr = new Array[Bits](nrCores)
-    for (core <- 0 until nrCores) {
-        val rightBits = new Array[Bits](statusBitsSize)
-        for (addr <- 0 until statusBitsSize) {
-            val location = statusBits(addr)
-            val coreState = StatusBits.get(location, core)
-            rightBits(addr) = coreState(0)
-        }
-        allRightBitsArr(core) = catAll(rightBits)
-    }
-    val allRightBits = Vec(allRightBitsArr)
-
-    // After masking the bit for the current location, the negation of the
-    // recursive OR of the bit strings for this core tells whether all the
-    // read locations have been written to, marking the end of a commit. The
-    // masking of the current location assumes a write in that location in the
-    // current cycle.
-    val allWritten = ~((allRightBits(io.core) & ~(UInt(1) << io.slave.M.Addr))
-            .orR)
+    statusBits.io.addr := io.slave.M.Addr >> log2Up(granularity)
+    statusBits.io.core := io.core
 
     // Commit bits
     val inCommit = RegInit(Bits(0, width = nrCores))
 
-    val currentStatusBits = getStatusBits(io.slave.M.Addr)
+    val shouldWrite = io.slave.M.Cmd === OcpCmd.WR && statusBits.io.canWrite
 
-    val hasUncommitted = StatusBits.orMap(currentStatusBits, isUncommitted _)
-    val hasInCommit = StatusBits.orMap(currentStatusBits, isInCommit _)
-    val committingHere = hasUncommitted || hasInCommit
-
-    val canRead = ~hasUncommitted
-    val canWrite = ~committingHere && (inCommit(io.core) || allUntouched(io.core))
-
-    val shouldWrite = io.slave.M.Cmd === OcpCmd.WR && canWrite
-
-    io.db := hasUncommitted ## hasInCommit
-    io.location := currentStatusBits
-    io.commits := StatusBits.makeWrittenBefore(currentStatusBits, io.core)
-    io.written := allWritten
+    io.db := Bits(0)
+    io.location := Bits(0)
+    io.commits := Bits(0)
+    io.written := Bits(0)
 
     val cmdReg = Reg(next = io.slave.M.Cmd)
     val dataReg = RegInit(io.slave.M.Data)
@@ -206,17 +248,21 @@ class TransSpm(
 
     switch (io.slave.M.Cmd) {
         is (OcpCmd.RD) {
-            when (canRead) {
-                currentStatusBits := StatusBits.makeUntouched(currentStatusBits, io.core)
+            when (statusBits.io.canRead) {
+                statusBits.io.dva := Bool(true)
+                statusBits.io.data := UNTOUCHED_SINCE_START
             }
         }
 
         is (OcpCmd.WR) {
-            when (canWrite) {
-                when (allWritten) {
-                    doCommit(io.core, io.slave.M.Addr)
+            when (statusBits.io.canWrite) {
+                statusBits.io.dva := Bool(true)
+
+                when (statusBits.io.allWritten) {
+                    statusBits.io.data := WRITTEN_BEFORE_START
+
                 }.otherwise {
-                    currentStatusBits := StatusBits.write(currentStatusBits, io.core, Bool(true))
+                    statusBits.io.data := WRITTEN_IN_COMMIT
                 }
 
                 inCommit(io.core) := ~allWritten
@@ -404,3 +450,9 @@ object TransSpmTester {
       }
   }
 }
+
+// def apply(nrCores :Int) = {
+//     val location = Bits()
+//     location := Fill(nrCores, WRITTEN_BEFORE_START)
+//     location
+// }
