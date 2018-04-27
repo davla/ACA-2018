@@ -21,20 +21,4 @@ object Util {
 
         out
     }
-
-    class ClockCounter(max :Int) extends Module {
-        val io = new Bundle() {
-            val n = UInt(OUTPUT, log2Up(max))
-        }
-
-        val cnt = Reg(UInt(0, log2Up(max)))
-        io.n := cnt
-        cnt := Mux(cnt === UInt(max - 1), UInt(0), cnt + UInt(1))
-    }
-
-    object ClockCounter {
-        def apply(n :Int) = {
-            Module(new ClockCounter(n))
-        }
-    }
 }
