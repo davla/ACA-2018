@@ -24,64 +24,51 @@ class StatusBits (
         val core = Bits(INPUT, log2Up(nrCores))
         val wrEnable = Bool(INPUT)
         val data = Bits(INPUT, stateWidth)
-        val allUntouched = Bool(OUTPUT)
+        val canCommit = Bool(OUTPUT)
     }
 
     val statusBits = Mem(makeInitLocation(nrCores), size)
+    val canCommit = RegInit(Fill(nrCores, Bits(1)))
 
     val location = statusBits(io.addr)
+    val coreShift = io.core << indexShift
 
-    // Each of the OR gates here has as input the left bit of a core state
-    // for every location. It is used to check whether any location is in the
-    // WRITTEN_AFTER_START state. It is ignored during commits, that is the
-    // only moment in which the state can be WRITTEN_IN_COMMIT
-    val allUntouchedArr = new Array[Bool](nrCores)
-    for (core <- 0 until nrCores) {
-        val leftBits = new Array[Bits](size)
-        for (addr <- 0 until size) {
-            val location = statusBits(addr)
-            val coreState = getCoreState(location, core)
-            leftBits(addr) = coreState(1)
-        }
-        allUntouchedArr(core) = orAll(leftBits) === Bits(0)
-    }
-    val allUntouched = Vec(allUntouchedArr)
-
-    io.allUntouched := allUntouched(io.core)
+    io.canCommit := (canCommit >> coreShift)(0)
 
     when (io.wrEnable) {
         switch (io.data) {
             is (PRISTINE) {
-                val andBitMask = ~(UInt(1) << ((io.core << indexShift) + UInt(1)))
-                val orBitMask = UInt(1) << (io.core << indexShift)
-                location := (location & andBitMask) | orBitMask
+                val bitMask = UInt(1) << coreShift
+                location := location | bitMask
             }
 
             is (DIRTY) {
-                val bitMask = ~(UInt("b11") << (io.core << indexShift))
-                val thisCoreLocation = location & bitMask
+                val andBitMask = ~(UInt("b11") << coreShift)
+                val orBitMask = Fill(nrCores, Bits("b10")) & andBitMask
 
-                val newStates = new Array[Bits](nrCores)
+                val newLocation = (location & andBitMask) | orBitMask
+                location := newLocation
+
+                val newCommits = new Array[Bool](nrCores)
                 for (core <- 0 until nrCores) {
-                    val coreState = getCoreState(thisCoreLocation, core)
-                    val isUntouched = coreState === PRISTINE
-
-                    newStates(core) = Mux(isUntouched, DIRTY, coreState)
+                    val coreState = getCoreState(newLocation, core)
+                    newCommits(core) = coreState != (IN_TRANSACTION ## DIRTY)
                 }
 
                 // Status bits are reversed
-                location := catAll(newStates.reverse)
+                canCommit := catAll(newCommits.reverse)
             }
         }
     }
 }
 
 object StatusBits {
-    val NOT_IN_TRANSACTION = Bits("b00")  //initial state
-    val PRISTINE = Bits("b01")
-    val DIRTY = Bits("b11")
+    val NOT_IN_TRANSACTION = Bits(0)
+    val IN_TRANSACTION = Bits(1)
+    val PRISTINE = Bits(0)
+    val DIRTY = Bits(1)
 
-    val stateWidth = NOT_IN_TRANSACTION.getWidth
+    val stateWidth = 2
     val indexShift = log2Up(stateWidth)
 
     def apply(nrCores :Int, size :Int) = {
@@ -95,7 +82,7 @@ object StatusBits {
     }
 
     def makeInitLocation(nrCores :Int) = {
-        val location = Fill(nrCores, NOT_IN_TRANSACTION)
+        val location = Fill(nrCores, NOT_IN_TRANSACTION ## PRISTINE)
         location.setWidth(nrCores * stateWidth)
         location
     }
@@ -142,7 +129,7 @@ class TransSpm(
     statusBits.io.wrEnable := Bool(false)
     statusBits.io.data := Bits(0)
 
-    val shouldWrite = io.slave.M.Cmd === OcpCmd.WR && statusBits.io.allUntouched
+    val shouldWrite = io.slave.M.Cmd === OcpCmd.WR && statusBits.io.canCommit
 
     val cmdReg = Reg(next = io.slave.M.Cmd)
     val dataReg = RegInit(io.slave.M.Data)
@@ -168,7 +155,7 @@ class TransSpm(
         }
 
         is (OcpCmd.WR) {
-            when (statusBits.io.allUntouched) {
+            when (statusBits.io.canCommit) {
                 statusBits.io.wrEnable := Bool(true)
                 statusBits.io.data := DIRTY
                 dataReg := Result.SUCCESS
