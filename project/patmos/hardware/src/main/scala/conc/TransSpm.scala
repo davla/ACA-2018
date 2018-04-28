@@ -28,37 +28,59 @@ class StatusBits (
     }
 
     val statusBits = Mem(makeInitLocation(nrCores), size)
-    val canCommit = RegInit(Fill(nrCores, Bits(1)))
+    val canCommit = RegInit(Fill(nrCores, Bool(true)))
+    val inTransaction = RegInit(Fill(nrCores, Bool(false)))
 
     val location = statusBits(io.addr)
     val coreShift = io.core << indexShift
 
-    io.canCommit := (canCommit >> coreShift)(0)
+    io.canCommit := (canCommit >> io.core)(0)
+
 
     when (io.wrEnable) {
         switch (io.data) {
             is (PRISTINE) {
-                val bitMask = UInt(1) << coreShift
-                location := location | bitMask
+                val bitMask = UInt(1) << (coreShift + UInt(1))
+                val newLocation = location | bitMask
+                val isCoreInTransaction = (inTransaction >> io.core)(0)
+
+                when (~isCoreInTransaction) {
+                    // maek everything pristine
+                }
+
+                location := newLocation
+                canCommit := Mux(isCoreInTransaction, updateCommits(newLocation), canCommit)
+                inTransaction := inTransaction | (UInt(1) << io.core)
             }
 
             is (DIRTY) {
                 val andBitMask = ~(UInt("b11") << coreShift)
-                val orBitMask = Fill(nrCores, Bits("b10")) & andBitMask
-
+                val orBitMask = Fill(nrCores, Bits("b01")) & andBitMask
                 val newLocation = (location & andBitMask) | orBitMask
+
                 location := newLocation
+                canCommit := updateCommits(newLocation)
+                inTransaction := inTransaction & ~(UInt(1) << io.core)
+            }
 
-                val newCommits = new Array[Bool](nrCores)
-                for (core <- 0 until nrCores) {
-                    val coreState = getCoreState(newLocation, core)
-                    newCommits(core) = coreState != (IN_TRANSACTION ## DIRTY)
-                }
-
-                // Status bits are reversed
-                canCommit := catAll(newCommits.reverse)
+            is (NOT_IN_TRANSACTION) {
+                val bitMask = UInt(1) << io.core
+                canCommit := canCommit | bitMask
+                inTransaction := inTransaction & ~(UInt(1) << io.core)
             }
         }
+    }
+
+    def updateCommits(location :Bits) = {
+        val newCommits = new Array[Bool](nrCores)
+        for (core <- 0 until nrCores) {
+            val coreState = getCoreState(location, core)
+            val isOk = coreState =/= (IN_TRANSACTION ## DIRTY)
+            newCommits(core) = canCommit(core) && isOk
+        }
+
+        // Status bits are reversed
+        catAll(newCommits.reverse)
     }
 }
 
@@ -155,11 +177,13 @@ class TransSpm(
         }
 
         is (OcpCmd.WR) {
+            statusBits.io.wrEnable := Bool(true)
+
             when (statusBits.io.canCommit) {
-                statusBits.io.wrEnable := Bool(true)
                 statusBits.io.data := DIRTY
                 dataReg := Result.SUCCESS
             }.otherwise {
+                statusBits.io.data := NOT_IN_TRANSACTION
                 dataReg := Result.FAIL
             }
         }
@@ -246,9 +270,7 @@ class TransSpmTester(dut: TransSpm) extends Tester(dut) {
   }
 
   poke(dut.io.core, 0)
-  for (addr <- 0 until(256, GRANULARITY)) {
-      expect(write(addr, 0xFF), 1)
-  }
+  expect(write(128, 0xFF), 1)
 
   // Even writing one variable makes the whole transaction not commit
   poke(dut.io.core, 0)
@@ -260,9 +282,24 @@ class TransSpmTester(dut: TransSpm) extends Tester(dut) {
   expect(write(128, 0xFF), 0)
 
   poke(dut.io.core, 0)
-  for (addr <- 0 until(256, GRANULARITY)) {
-      expect(write(addr, 0xFF), 1)
+  expect(write(64, 0xFF), 1)
+
+  // Reading a variable while in transaction after it has been written by
+  // another core makes the commit fail
+
+  poke(dut.io.core, 0)
+  for (addr <- 0 until(64, GRANULARITY)) {
+      read(addr)
   }
+
+  poke(dut.io.core, 1)
+  for (addr <- 64 until(256, GRANULARITY)) {
+      expect(write(addr, 0xFF), 0)
+  }
+
+  poke(dut.io.core, 0)
+  read(128)
+  expect(write(0, 0xFF), 1)
 }
 
 object TransSpmTester {
