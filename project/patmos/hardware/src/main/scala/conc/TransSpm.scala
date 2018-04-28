@@ -13,62 +13,91 @@ import ocp._
 import patmos._
 import patmos.Constants._
 
+class StatusBits (
+    nrCores :Int,
+    size :Int
+) extends Module {
+    import StatusBits._
+
+    val io = new Bundle() {
+        val addr = Bits(INPUT, log2Up(size))
+        val core = Bits(INPUT, log2Up(nrCores))
+        val wrEnable = Bool(INPUT)
+        val data = Bits(INPUT, stateWidth)
+        val allUntouched = Bool(OUTPUT)
+    }
+
+    val statusBits = Mem(makeInitLocation(nrCores), size)
+
+    val location = statusBits(io.addr)
+
+    // Each of the OR gates here has as input the left bit of a core state
+    // for every location. It is used to check whether any location is in the
+    // WRITTEN_AFTER_START state. It is ignored during commits, that is the
+    // only moment in which the state can be WRITTEN_IN_COMMIT
+    val allUntouchedArr = new Array[Bool](nrCores)
+    for (core <- 0 until nrCores) {
+        val leftBits = new Array[Bits](size)
+        for (addr <- 0 until size) {
+            val location = statusBits(addr)
+            val coreState = getCoreState(location, core)
+            leftBits(addr) = coreState(1)
+        }
+        allUntouchedArr(core) = orAll(leftBits) === Bits(0)
+    }
+    val allUntouched = Vec(allUntouchedArr)
+
+    io.allUntouched := allUntouched(io.core)
+
+    when (io.wrEnable) {
+        switch (io.data) {
+            is (PRISTINE) {
+                val andBitMask = ~(UInt(1) << ((io.core << indexShift) + UInt(1)))
+                val orBitMask = UInt(1) << (io.core << indexShift)
+                location := (location & andBitMask) | orBitMask
+            }
+
+            is (DIRTY) {
+                val bitMask = ~(UInt("b11") << (io.core << indexShift))
+                val thisCoreLocation = location & bitMask
+
+                val newStates = new Array[Bits](nrCores)
+                for (core <- 0 until nrCores) {
+                    val coreState = getCoreState(thisCoreLocation, core)
+                    val isUntouched = coreState === PRISTINE
+
+                    newStates(core) = Mux(isUntouched, DIRTY, coreState)
+                }
+
+                // Status bits are reversed
+                location := catAll(newStates.reverse)
+            }
+        }
+    }
+}
+
 object StatusBits {
     val NOT_IN_TRANSACTION = Bits("b00")  //initial state
     val PRISTINE = Bits("b01")
     val DIRTY = Bits("b11")
 
-    val stateWidth = DIRTY.getWidth
+    val stateWidth = NOT_IN_TRANSACTION.getWidth
     val indexShift = log2Up(stateWidth)
 
-    def apply(nrCores :Int) = {
-        val location = Fill(nrCores, NOT_IN_TRANSACTION)
-        location.setWidth(nrCores * stateWidth)
-        location
+    def apply(nrCores :Int, size :Int) = {
+        Module(new StatusBits(nrCores, size))
     }
 
-    def applyBitMask(location :Bits, andMask :Bits, orMask :Bits) = {
-        (location & andMask) | orMask
-    }
-
-    def get(location :Bits, index :Int) = {
-        val start = index * stateWidth
+    def getCoreState(location :Bits, core :Int) = {
+        val start = core * stateWidth
         val end = start + stateWidth - 1
         location(end, start)
     }
 
-    def get(location :Bits, index :UInt) = {
-        (location.toUInt >> (index << indexShift))(1, 0)
-    }
-
-    def makeNotInTransaction(location: Bits, index :UInt) = {
-        val andBitMask = ~(UInt("b11") << (index << indexShift))
-        val orBitMask = UInt(0)
-        applyBitMask(location, andBitMask, orBitMask)
-    }
-
-    def makePristine(location :Bits, index :UInt) = {
-        val andBitMask = ~(UInt(1) << ((index << indexShift) + UInt(1)))
-        val orBitMask = UInt(1) << (index << indexShift)
-        applyBitMask(location, andBitMask, orBitMask)
-    }
-
-    def write(location :Bits, core :UInt) = {
-        val nrCores = location.getWidth / stateWidth
-
-        val thisCoreSet = makeNotInTransaction(location, core)
-
-        val newStates = new Array[Bits](nrCores)
-        for (k <- 0 until nrCores) {
-            val coreState = get(thisCoreSet, k)
-            val isUntouched = coreState === PRISTINE
-
-            // Status bits are reversed
-            newStates(nrCores - 1 - k) = Mux(isUntouched, DIRTY,
-                coreState)
-        }
-
-        catAll(newStates)
+    def makeInitLocation(nrCores :Int) = {
+        val location = Fill(nrCores, NOT_IN_TRANSACTION)
+        location.setWidth(nrCores * stateWidth)
+        location
     }
 }
 
@@ -98,7 +127,6 @@ class TransSpm(
     }
 
     val addrBits = log2Up(size / BYTES_PER_WORD)
-    val statusBitsSize = size / granularity
 
     // generate byte memories
     val mem = new Array[MemBlockIO](BYTES_PER_WORD)
@@ -107,29 +135,14 @@ class TransSpm(
     }
 
     // Status bits
-    val statusBits = Mem(StatusBits(nrCores), statusBitsSize)
+    val statusBits = StatusBits(nrCores, size / granularity)
 
-    // Each of the OR gates here has as input the left bit of a core state
-    // for every location. It is used to check whether any location is in the
-    // WRITTEN_AFTER_START state. It is ignored during commits, that is the
-    // only moment in which the state can be WRITTEN_IN_COMMIT
-    val allUntouchedArr = new Array[Bool](nrCores)
-    for (core <- 0 until nrCores) {
-        val leftBits = new Array[Bits](statusBitsSize)
-        for (addr <- 0 until statusBitsSize) {
-            val location = statusBits(addr)
-            val coreState = StatusBits.get(location, core)
-            leftBits(addr) = coreState(1)
-        }
-        allUntouchedArr(core) = orAll(leftBits) === Bits(0)
-    }
-    val allUntouched = Vec(allUntouchedArr)
+    statusBits.io.addr := io.slave.M.Addr >> log2Up(granularity)
+    statusBits.io.core := io.core
+    statusBits.io.wrEnable := Bool(false)
+    statusBits.io.data := Bits(0)
 
-    val currentStatusBits = getStatusBits(io.slave.M.Addr)
-
-    val notInTransaction = get(currentStatusBits, io.core) === NOT_IN_TRANSACTION
-
-    val shouldWrite = io.slave.M.Cmd === OcpCmd.WR && (notInTransaction || allUntouched(io.core))
+    val shouldWrite = io.slave.M.Cmd === OcpCmd.WR && statusBits.io.allUntouched
 
     val cmdReg = Reg(next = io.slave.M.Cmd)
     val dataReg = RegInit(io.slave.M.Data)
@@ -150,22 +163,19 @@ class TransSpm(
 
     switch (io.slave.M.Cmd) {
         is (OcpCmd.RD) {
-            currentStatusBits := StatusBits.makePristine(currentStatusBits, io.core)
+            statusBits.io.wrEnable := Bool(true)
+            statusBits.io.data := PRISTINE
         }
 
         is (OcpCmd.WR) {
-            when (allUntouched(io.core)) {
-                currentStatusBits := StatusBits.write(currentStatusBits, io.core)
+            when (statusBits.io.allUntouched) {
+                statusBits.io.wrEnable := Bool(true)
+                statusBits.io.data := DIRTY
                 dataReg := Result.SUCCESS
             }.otherwise {
                 dataReg := Result.FAIL
             }
         }
-    }
-
-    def getStatusBits(address :UInt) = {
-        val statusBitsAddr = address >> log2Up(granularity)
-        statusBits(statusBitsAddr)
     }
 }
 
