@@ -27,9 +27,10 @@ class StatusBits (
         val allUntouched = Bool(OUTPUT)
     }
 
-    val statusBits = Mem(makeInitLocation(nrCores), size)
+    val statusBits = Vec.fill(nrCores)(RegInit(makeInit(size)))
 
-    val location = statusBits(io.addr)
+    val coreStates = statusBits(io.core)
+    val addrShift = io.addr << indexShift
 
     // Each of the OR gates here has as input the left bit of a core state
     // for every location. It is used to check whether any location is in the
@@ -38,11 +39,10 @@ class StatusBits (
     val allUntouchedArr = new Array[Bool](nrCores)
     for (core <- 0 until nrCores) {
         val leftBits = new Array[Bits](size)
-        for (addr <- 0 until size) {
-            val location = statusBits(addr)
-            val coreState = getCoreState(location, core)
-            leftBits(addr) = coreState(1)
+        for (addr <- 1 until (size * stateWidth, stateWidth)) {
+            leftBits((addr - 1) / stateWidth) = statusBits(core)(addr)
         }
+
         allUntouchedArr(core) = orAll(leftBits) === Bits(0)
     }
     val allUntouched = Vec(allUntouchedArr)
@@ -52,27 +52,52 @@ class StatusBits (
     when (io.wrEnable) {
         switch (io.data) {
             is (PRISTINE) {
-                val andBitMask = ~(UInt(1) << ((io.core << indexShift) + UInt(1)))
-                val orBitMask = UInt(1) << (io.core << indexShift)
-                location := (location & andBitMask) | orBitMask
+                val coreState = getCoreState(statusBits, io.core)
+
+                // Quirky, means that it' been written but not read yet
+                when (coreState === PRISTINE) {
+                    val bitMask = UInt(1) << (addrShift + UInt(1))
+                    coreStates := coreStates | bitMask
+
+                }.elsewhen (coreState === NOT_IN_TRANSACTION) {
+                    val bitMask = UInt(1) << addrShift
+                    coreStates := coreStates | bitMask
+                }
             }
 
             is (DIRTY) {
-                val bitMask = ~(UInt("b11") << (io.core << indexShift))
-                val thisCoreLocation = location & bitMask
-
-                val newStates = new Array[Bits](nrCores)
                 for (core <- 0 until nrCores) {
-                    val coreState = getCoreState(thisCoreLocation, core)
-                    val isUntouched = coreState === PRISTINE
+                    switch (getCoreState(statusBits, core)) {
+                        is (PRISTINE) {
+                            val bitMask = UInt(1) << (addrShift + UInt(1))
+                            statusBits(core) := statusBits(core) | bitMask
+                        }
 
-                    newStates(core) = Mux(isUntouched, DIRTY, coreState)
+                        is (DIRTY) {
+                            statusBits(core) := statusBits(core)
+                        }
+
+                        is (NOT_IN_TRANSACTION) {
+                            val bitMask = UInt(1) << addrShift
+                            statusBits(core) := statusBits(core) | bitMask
+                        }
+                    }
                 }
 
-                // Status bits are reversed
-                location := catAll(newStates.reverse)
+                coreStates := Bits(0)
+            }
+
+            is (NOT_IN_TRANSACTION) {
+                coreStates := Bits(0)
             }
         }
+    }
+
+    def getCoreState(states :Vec[UInt], core :Int) = {
+        (states(core) >> addrShift)(stateWidth - 1, 0)
+    }
+    def getCoreState(states :Vec[UInt], core :UInt) = {
+        (states(core) >> addrShift)(stateWidth - 1, 0)
     }
 }
 
@@ -94,10 +119,10 @@ object StatusBits {
         location(end, start)
     }
 
-    def makeInitLocation(nrCores :Int) = {
-        val location = Fill(nrCores, NOT_IN_TRANSACTION)
-        location.setWidth(nrCores * stateWidth)
-        location
+    def makeInit(size :Int) = {
+        var coreLocations = Fill(size, NOT_IN_TRANSACTION)
+        coreLocations.setWidth(size * stateWidth)
+        coreLocations
     }
 }
 
@@ -168,11 +193,12 @@ class TransSpm(
         }
 
         is (OcpCmd.WR) {
+            statusBits.io.wrEnable := Bool(true)
             when (statusBits.io.allUntouched) {
-                statusBits.io.wrEnable := Bool(true)
                 statusBits.io.data := DIRTY
                 dataReg := Result.SUCCESS
             }.otherwise {
+                statusBits.io.data := NOT_IN_TRANSACTION
                 dataReg := Result.FAIL
             }
         }
@@ -259,9 +285,7 @@ class TransSpmTester(dut: TransSpm) extends Tester(dut) {
   }
 
   poke(dut.io.core, 0)
-  for (addr <- 0 until(256, GRANULARITY)) {
-      expect(write(addr, 0xFF), 1)
-  }
+  expect(write(128, 0xFF), 1)
 
   // Even writing one variable makes the whole transaction not commit
   poke(dut.io.core, 0)
@@ -273,9 +297,48 @@ class TransSpmTester(dut: TransSpm) extends Tester(dut) {
   expect(write(128, 0xFF), 0)
 
   poke(dut.io.core, 0)
-  for (addr <- 0 until(256, GRANULARITY)) {
-      expect(write(addr, 0xFF), 1)
+  expect(write(64, 0xFF), 1)
+
+  // Reading a variable while in transaction after it has been written by
+  // another core makes the commit fail
+
+  poke(dut.io.core, 0)
+  for (addr <- 0 until(64, GRANULARITY)) {
+      read(addr)
   }
+
+  poke(dut.io.core, 1)
+  for (addr <- 64 until(256, GRANULARITY)) {
+      expect(write(addr, 0xFF), 0)
+  }
+
+  poke(dut.io.core, 0)
+  read(128)
+  expect(write(0, 0xFF), 1)
+
+  // A writes terminates the current transaction, regardless of its result
+
+  // Commited transaction
+  poke(dut.io.core, 0)
+  for (addr <- 0 until(256, GRANULARITY)) {
+      read(addr)
+  }
+
+  expect(write(128, 0xFF), 0)
+  expect(write(512, 0xFF), 0)
+
+  // Uncommited transaction
+  poke(dut.io.core, 0)
+  for (addr <- 0 until(256, GRANULARITY)) {
+      read(addr)
+  }
+
+  poke(dut.io.core, 1)
+  expect(write(128, 0xFF), 0)
+
+  poke(dut.io.core, 0)
+  expect(write(64, 0xFF), 1)
+  expect(write(512, 0xFF), 0)
 }
 
 object TransSpmTester {
