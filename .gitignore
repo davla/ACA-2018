@@ -126,6 +126,7 @@ sympy-plots-for-*.tex/
 
 **/bootable
 /project/local/
+*.elf
 
 # Chisel
 

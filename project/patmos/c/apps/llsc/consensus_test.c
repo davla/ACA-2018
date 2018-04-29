@@ -69,7 +69,7 @@ int main() {
           printf("Consensus not reached: found [");
 
           for (k = 0; k < slaves_count - 1; ++k) {
-              printf("%d, ", choices[k])
+              printf("%d, ", choices[k]);
           }
           printf("%d]\n", choices[slaves_count - 1]);
 
