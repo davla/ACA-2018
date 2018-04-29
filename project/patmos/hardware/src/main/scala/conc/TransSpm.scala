@@ -27,54 +27,65 @@ class StatusBits (
         val canCommit = Bool(OUTPUT)
     }
 
-    val statusBits = Mem(makeInitLocation(nrCores), size)
+    val statusBits = Vec.fill(nrCores)(RegInit(makeInit(size)))
     val canCommit = RegInit(Fill(nrCores, Bool(true)))
     val inTransaction = RegInit(Fill(nrCores, Bool(false)))
 
-    val location = statusBits(io.addr)
-    val coreShift = io.core << indexShift
-
     io.canCommit := (canCommit >> io.core)(0)
 
+    val coreStates = statusBits(io.core)
+    val addrShift = io.addr << indexShift
+    val coreInTransaction = (inTransaction >> io.core)(0)
 
     when (io.wrEnable) {
-        switch (io.data) {
-            is (PRISTINE) {
-                val bitMask = UInt(1) << (coreShift + UInt(1))
-                val newLocation = location | bitMask
-                val isCoreInTransaction = (inTransaction >> io.core)(0)
+        when (io.data(1) === NOT_IN_TRANSACTION) {
+            inTransaction := inTransaction & ~(UInt(1) << io.core)
+            canCommit := canCommit | (UInt(1) << io.core)
+            coreStates := Bits(0)
 
-                when (~isCoreInTransaction) {
-                    // maek everything pristine
+            when (io.data(0) === DIRTY) {
+                val bitMask = UInt(1) << addrShift
+
+                val newStates = new Array[UInt](nrCores)
+                for (core <- 0 until nrCores) {
+                    val coreStates = statusBits(core) | bitMask
+                    newStates(core) = Mux(UInt(core) === io.core, Bits(0),
+                            coreStates)
+                    statusBits(core) := newStates(core)
                 }
 
-                location := newLocation
-                canCommit := Mux(isCoreInTransaction, updateCommits(newLocation), canCommit)
-                inTransaction := inTransaction | (UInt(1) << io.core)
+                canCommit := updateCommits(Vec(newStates.toSeq))
             }
 
-            is (DIRTY) {
-                val andBitMask = ~(UInt("b11") << coreShift)
-                val orBitMask = Fill(nrCores, Bits("b01")) & andBitMask
-                val newLocation = (location & andBitMask) | orBitMask
+        }.elsewhen (io.data(0) === PRISTINE) {
+            inTransaction := inTransaction | (UInt(1) << io.core)
 
-                location := newLocation
-                canCommit := updateCommits(newLocation)
-                inTransaction := inTransaction & ~(UInt(1) << io.core)
-            }
+            val bitMask = UInt(1) << (addrShift + UInt(1))
+            when (coreInTransaction) {
+                val newCoreStates = coreStates | bitMask
+                coreStates := newCoreStates
 
-            is (NOT_IN_TRANSACTION) {
-                val bitMask = UInt(1) << io.core
-                canCommit := canCommit | bitMask
-                inTransaction := inTransaction & ~(UInt(1) << io.core)
+                val newStates = new Array[UInt](nrCores)
+                for (core <- 0 until nrCores) {
+                    newStates(core) = Mux(UInt(core) === io.core,
+                            newCoreStates, statusBits(core))
+                }
+
+                canCommit := updateCommits(Vec(newStates.toSeq))
+            }.otherwise {
+                coreStates := bitMask
             }
         }
     }
 
-    def updateCommits(location :Bits) = {
+    def getCoreState(states :Vec[UInt], core :Int) = {
+        (states(core) >> addrShift)(stateWidth - 1, 0)
+    }
+
+    def updateCommits(states :Vec[UInt]) = {
         val newCommits = new Array[Bool](nrCores)
         for (core <- 0 until nrCores) {
-            val coreState = getCoreState(location, core)
+            val coreState = getCoreState(states, core)
             val isOk = coreState =/= (IN_TRANSACTION ## DIRTY)
             newCommits(core) = canCommit(core) && isOk
         }
@@ -97,16 +108,10 @@ object StatusBits {
         Module(new StatusBits(nrCores, size))
     }
 
-    def getCoreState(location :Bits, core :Int) = {
-        val start = core * stateWidth
-        val end = start + stateWidth - 1
-        location(end, start)
-    }
-
-    def makeInitLocation(nrCores :Int) = {
-        val location = Fill(nrCores, NOT_IN_TRANSACTION ## PRISTINE)
-        location.setWidth(nrCores * stateWidth)
-        location
+    def makeInit(size :Int) = {
+        var coreLocations = Fill(size, NOT_IN_TRANSACTION ## PRISTINE)
+        coreLocations.setWidth(size * 2)
+        coreLocations
     }
 }
 
@@ -173,17 +178,17 @@ class TransSpm(
     switch (io.slave.M.Cmd) {
         is (OcpCmd.RD) {
             statusBits.io.wrEnable := Bool(true)
-            statusBits.io.data := PRISTINE
+            statusBits.io.data := IN_TRANSACTION ## PRISTINE
         }
 
         is (OcpCmd.WR) {
             statusBits.io.wrEnable := Bool(true)
 
             when (statusBits.io.canCommit) {
-                statusBits.io.data := DIRTY
+                statusBits.io.data := NOT_IN_TRANSACTION ## DIRTY
                 dataReg := Result.SUCCESS
             }.otherwise {
-                statusBits.io.data := NOT_IN_TRANSACTION
+                statusBits.io.data := NOT_IN_TRANSACTION ## ~DIRTY
                 dataReg := Result.FAIL
             }
         }
@@ -300,6 +305,30 @@ class TransSpmTester(dut: TransSpm) extends Tester(dut) {
   poke(dut.io.core, 0)
   read(128)
   expect(write(0, 0xFF), 1)
+
+  // A writes terminates the current transaction, regardless of its result
+
+  // Commited transaction
+  poke(dut.io.core, 0)
+  for (addr <- 0 until(256, GRANULARITY)) {
+      read(addr)
+  }
+
+  expect(write(128, 0xFF), 0)
+  expect(write(512, 0xFF), 0)
+
+  // Uncommited transaction
+  poke(dut.io.core, 0)
+  for (addr <- 0 until(256, GRANULARITY)) {
+      read(addr)
+  }
+
+  poke(dut.io.core, 1)
+  expect(write(128, 0xFF), 0)
+
+  poke(dut.io.core, 0)
+  expect(write(64, 0xFF), 1)
+  expect(write(512, 0xFF), 0)
 }
 
 object TransSpmTester {
