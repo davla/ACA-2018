@@ -22,7 +22,6 @@ volatile _IODEV int* us_ptr = (volatile _IODEV int *) (PATMOS_IO_TIMER+12);
 volatile _SPM int* sspm = (volatile _SPM int *) (TRANS_SPM);
 volatile _SPM int* addr1 = (volatile _SPM int *) (TRANS_SPM + 32);
 volatile _SPM int* addr2 = (volatile _SPM int *) (TRANS_SPM + 128);
-volatile _SPM int* addr3 = (volatile _SPM int *) (TRANS_SPM + 256);
 
 void wait_period(unsigned int period) {
     int next = *us_ptr + period;
