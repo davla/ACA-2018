@@ -34,8 +34,6 @@ void make_same(void* args) {
     unsigned int period = rand_r(&seed) & 0xFFFF;
     int my_value = (int) args;
 
-    *addr3 = 55;
-
     int value1 = *addr1;
     int value2 = *addr2;
 
