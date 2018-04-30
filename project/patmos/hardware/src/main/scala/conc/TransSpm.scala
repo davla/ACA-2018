@@ -221,7 +221,6 @@ class TransSpmTester(dut: TransSpm) extends Tester(dut) {
 
   println("Transactional SPM Tester")
 
-  // Response defaults ot OcpResp.DVA
   def read(addr: Int) = {
     println("---------------------------")
     poke(dut.io.slave.M.Addr, addr)
