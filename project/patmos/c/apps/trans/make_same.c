@@ -65,8 +65,8 @@ int main() {
     corethread_join(1, (void**) &res);
     corethread_join(2, (void**) &res);
 
-    int value1 = *addr1;
-    int value2 = *addr2;
+    value1 = *addr1;
+    value2 = *addr2;
 
     if (value1 == value2) {
         printf("Success! Found: ");
