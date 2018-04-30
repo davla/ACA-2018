@@ -33,7 +33,7 @@ volatile _IODEV int* timer_ptr = (volatile _IODEV int *) (PATMOS_IO_TIMER+4);
     Needs to be a macro otherwise the compiler complains about addresses not
     being constant at compile-time.
 */
-#define SHARED_SPM *((volatile _SPM int *) 0xE8000000)
+#define SHARED_SPM (0xE8000000)
 volatile _SPM int* shared_addr = (volatile _SPM int *) (SHARED_SPM + 32);
 volatile _SPM int* sync_addr = (volatile _SPM int *) (SHARED_SPM + 64);
 
