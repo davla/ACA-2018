@@ -1,5 +1,5 @@
 /*
- * A shared scratchpad memory supporting LL/SC, with
+ * A shared scratchpad memory supporting transactional memory, with
  * time allocated arbitration.
  *
  * Author: Davide Laezza - Roberts Fanning - Wenhao Li
@@ -14,17 +14,26 @@ import conc.Util._
 import ocp._
 import patmos.Constants._
 
+/*
+    The SharedTransSpm module connects a TransSpm to the cores via arbiters
+    that use a time-slotted policy to access the underlying scratchpad memory.
+*/
 class SharedTransSpm(
     granularity :Int,
     nrCores: Int,
     size: Int
 ) extends Module {
+
     // ncCores OCP slaves to connect to the cores
     val io = Vec.fill(nrCores)(new OcpCoreSlavePort(ADDR_WIDTH, DATA_WIDTH))
 
-    // The LL/SC scratchpad memory
+    // The transactional scratchpad memory
     val mem = TransSpm(granularity, nrCores, size)
 
+    /*
+        The arbiters, connected each to a different core, but all to the
+        output of the underlying scratchpad memory.
+    */
     val arbiters = new Array[Arbiter](nrCores)
     for (i <- 0 until nrCores) {
         arbiters(i) = Arbiter(i, nrCores, 0)
@@ -34,6 +43,11 @@ class SharedTransSpm(
         arbiter.io.master.S <> mem.io.slave.S
     }
 
+    /*
+        OR-ing the outputs of the arbiters to the scratchpad memory, since
+        time-slot arbitration ensures that only one of them is using the
+        outputs at a given time
+    */
     mem.io.slave.M <> orAllOcpMaster(arbiters.map(_.io.master.M))
     mem.io.core := orAll(arbiters.map(_.io.core))
 }
