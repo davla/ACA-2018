@@ -32,12 +32,6 @@ volatile _IODEV int* us_ptr = (volatile _IODEV int *) (PATMOS_IO_TIMER+12);
 volatile _SPM int* sspm = (volatile _SPM int *) (SHARED_SPM);
 volatile _SPM int* shared_addr = (volatile _SPM int *) (SHARED_SPM + 32);
 
-// This function busy waits for the specified period, in microseconds
-void wait_period(unsigned int period) {
-    int next = *us_ptr + period;
-    while (*us_ptr - next < 0);
-}
-
 /*
     The choice of the consensus protocol. In a first-come-first-serve
     approach, the shared variable is read, and the own value is only written
@@ -54,9 +48,6 @@ void choose(void* args) {
 
     // The value in the shared address
     int value = *shared_addr;
-
-    // This increases the chances of a lost update occurring
-    wait_period(period);
 
     // Writing only if the default value is read.
     if (value == INIT) {
