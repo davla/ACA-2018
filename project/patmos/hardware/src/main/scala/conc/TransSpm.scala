@@ -24,71 +24,56 @@ class StatusBits (
         val core = Bits(INPUT, log2Up(nrCores))
         val wrEnable = Bool(INPUT)
         val data = Bits(INPUT, stateWidth)
-        val allUntouched = Bool(OUTPUT)
+        val canCommit = Bool(OUTPUT)
     }
 
     val statusBits = Vec.fill(nrCores)(RegInit(makeInit(size)))
+    val canCommit = RegInit(Fill(nrCores, Bool(true)))
+    val inTransaction = RegInit(Fill(nrCores, Bool(false)))
+
+    io.canCommit := (canCommit >> io.core)(0)
 
     val coreStates = statusBits(io.core)
     val addrShift = io.addr << indexShift
-
-    // Each of the OR gates here has as input the left bit of a core state
-    // for every location. It is used to check whether any location is in the
-    // WRITTEN_AFTER_START state. It is ignored during commits, that is the
-    // only moment in which the state can be WRITTEN_IN_COMMIT
-    val allUntouchedArr = new Array[Bool](nrCores)
-    for (core <- 0 until nrCores) {
-        val leftBits = new Array[Bits](size)
-        for (addr <- 1 until (size * stateWidth, stateWidth)) {
-            leftBits((addr - 1) / stateWidth) = statusBits(core)(addr)
-        }
-
-        allUntouchedArr(core) = orAll(leftBits) === Bits(0)
-    }
-    val allUntouched = Vec(allUntouchedArr)
-
-    io.allUntouched := allUntouched(io.core)
+    val coreInTransaction = (inTransaction >> io.core)(0)
 
     when (io.wrEnable) {
-        switch (io.data) {
-            is (PRISTINE) {
-                val coreState = getCoreState(statusBits, io.core)
+        when (io.data(1) === NOT_IN_TRANSACTION) {
+            inTransaction := inTransaction & ~(UInt(1) << io.core)
+            canCommit := canCommit | (UInt(1) << io.core)
+            coreStates := Bits(0)
 
-                // Quirky, means that it' been written but not read yet
-                when (coreState === PRISTINE) {
-                    val bitMask = UInt(1) << (addrShift + UInt(1))
-                    coreStates := coreStates | bitMask
+            when (io.data(0) === DIRTY) {
+                val bitMask = UInt(1) << addrShift
 
-                }.elsewhen (coreState === NOT_IN_TRANSACTION) {
-                    val bitMask = UInt(1) << addrShift
-                    coreStates := coreStates | bitMask
-                }
-            }
-
-            is (DIRTY) {
+                val newStates = new Array[UInt](nrCores)
                 for (core <- 0 until nrCores) {
-                    switch (getCoreState(statusBits, core)) {
-                        is (PRISTINE) {
-                            val bitMask = UInt(1) << (addrShift + UInt(1))
-                            statusBits(core) := statusBits(core) | bitMask
-                        }
-
-                        is (DIRTY) {
-                            statusBits(core) := statusBits(core)
-                        }
-
-                        is (NOT_IN_TRANSACTION) {
-                            val bitMask = UInt(1) << addrShift
-                            statusBits(core) := statusBits(core) | bitMask
-                        }
-                    }
+                    val coreStates = statusBits(core) | bitMask
+                    newStates(core) = Mux(UInt(core) === io.core, Bits(0),
+                            coreStates)
+                    statusBits(core) := newStates(core)
                 }
 
-                coreStates := Bits(0)
+                canCommit := updateCommits(Vec(newStates.toSeq))
             }
 
-            is (NOT_IN_TRANSACTION) {
-                coreStates := Bits(0)
+        }.elsewhen (io.data(0) === PRISTINE) {
+            inTransaction := inTransaction | (UInt(1) << io.core)
+
+            val bitMask = UInt(1) << (addrShift + UInt(1))
+            when (coreInTransaction) {
+                val newCoreStates = coreStates | bitMask
+                coreStates := newCoreStates
+
+                val newStates = new Array[UInt](nrCores)
+                for (core <- 0 until nrCores) {
+                    newStates(core) = Mux(UInt(core) === io.core,
+                            newCoreStates, statusBits(core))
+                }
+
+                canCommit := updateCommits(Vec(newStates.toSeq))
+            }.otherwise {
+                coreStates := bitMask
             }
         }
     }
@@ -96,32 +81,36 @@ class StatusBits (
     def getCoreState(states :Vec[UInt], core :Int) = {
         (states(core) >> addrShift)(stateWidth - 1, 0)
     }
-    def getCoreState(states :Vec[UInt], core :UInt) = {
-        (states(core) >> addrShift)(stateWidth - 1, 0)
+
+    def updateCommits(states :Vec[UInt]) = {
+        val newCommits = new Array[Bool](nrCores)
+        for (core <- 0 until nrCores) {
+            val coreState = getCoreState(states, core)
+            val isOk = coreState =/= (IN_TRANSACTION ## DIRTY)
+            newCommits(core) = canCommit(core) && isOk
+        }
+
+        // Status bits are reversed
+        catAll(newCommits.reverse)
     }
 }
 
 object StatusBits {
-    val NOT_IN_TRANSACTION = Bits("b00")  //initial state
-    val PRISTINE = Bits("b01")
-    val DIRTY = Bits("b11")
+    val NOT_IN_TRANSACTION = Bits(0)
+    val IN_TRANSACTION = Bits(1)
+    val PRISTINE = Bits(0)
+    val DIRTY = Bits(1)
 
-    val stateWidth = NOT_IN_TRANSACTION.getWidth
+    val stateWidth = 2
     val indexShift = log2Up(stateWidth)
 
     def apply(nrCores :Int, size :Int) = {
         Module(new StatusBits(nrCores, size))
     }
 
-    def getCoreState(location :Bits, core :Int) = {
-        val start = core * stateWidth
-        val end = start + stateWidth - 1
-        location(end, start)
-    }
-
     def makeInit(size :Int) = {
-        var coreLocations = Fill(size, NOT_IN_TRANSACTION)
-        coreLocations.setWidth(size * stateWidth)
+        var coreLocations = Fill(size, NOT_IN_TRANSACTION ## PRISTINE)
+        coreLocations.setWidth(size * 2)
         coreLocations
     }
 }
@@ -167,7 +156,7 @@ class TransSpm(
     statusBits.io.wrEnable := Bool(false)
     statusBits.io.data := Bits(0)
 
-    val shouldWrite = io.slave.M.Cmd === OcpCmd.WR && statusBits.io.allUntouched
+    val shouldWrite = io.slave.M.Cmd === OcpCmd.WR && statusBits.io.canCommit
 
     val cmdReg = Reg(next = io.slave.M.Cmd)
     val dataReg = RegInit(io.slave.M.Data)
@@ -189,16 +178,17 @@ class TransSpm(
     switch (io.slave.M.Cmd) {
         is (OcpCmd.RD) {
             statusBits.io.wrEnable := Bool(true)
-            statusBits.io.data := PRISTINE
+            statusBits.io.data := IN_TRANSACTION ## PRISTINE
         }
 
         is (OcpCmd.WR) {
             statusBits.io.wrEnable := Bool(true)
-            when (statusBits.io.allUntouched) {
-                statusBits.io.data := DIRTY
+
+            when (statusBits.io.canCommit) {
+                statusBits.io.data := NOT_IN_TRANSACTION ## DIRTY
                 dataReg := Result.SUCCESS
             }.otherwise {
-                statusBits.io.data := NOT_IN_TRANSACTION
+                statusBits.io.data := NOT_IN_TRANSACTION ## ~DIRTY
                 dataReg := Result.FAIL
             }
         }
