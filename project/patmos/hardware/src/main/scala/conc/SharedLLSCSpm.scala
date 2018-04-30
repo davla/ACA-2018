@@ -14,17 +14,26 @@ import conc.Util._
 import ocp._
 import patmos.Constants._
 
+/*
+    The SharedLLSCSpm module connects a LLSCSpm to the cores via arbiters
+    that use a time-slotted policy to access the underlying scratchpad memory.
+*/
 class SharedLLSCSpm(
     granularity :Int,
     nrCores: Int,
     size: Int
 ) extends Module {
+
     // ncCores OCP slaves to connect to the cores
     val io = Vec.fill(nrCores)(new OcpCoreSlavePort(ADDR_WIDTH, DATA_WIDTH))
 
     // The LL/SC scratchpad memory
     val mem = LLSCSpm(granularity, nrCores, size)
 
+    /*
+        The arbiters, connected each to a different core, but all to the
+        output of the underlying scratchpad memory.
+    */
     val arbiters = new Array[Arbiter](nrCores)
     for (i <- 0 until nrCores) {
         arbiters(i) = Arbiter(i, nrCores, 0)
@@ -34,6 +43,11 @@ class SharedLLSCSpm(
         arbiter.io.master.S <> mem.io.slave.S
     }
 
+    /*
+        OR-ing the outputs of the arbiters to the scratchpad memory, since
+        time-slot arbitration ensures that only one of them is using the
+        outputs at a given time
+    */
     mem.io.slave.M <> orAllOcpMaster(arbiters.map(_.io.master.M))
     mem.io.core := orAll(arbiters.map(_.io.core))
 }
@@ -66,15 +80,9 @@ class SharedLLSCSpmTester(dut: SharedLLSCSpm) extends Tester(dut) {
     poke(dut.io(n).M.Data, data)
     poke(dut.io(n).M.Cmd, 1) // OcpCmd.WR
     poke(dut.io(n).M.ByteEn, 0x0f)
-    // peek(dut.io(n).S.Data)
-    // step(1)
-    // peek(dut.io(n).S.Data)
     step(1)
-    // peek(dut.io(n).S.Data)
-    // sys.exit(0)
     poke(dut.io(n).M.Cmd, 0) // OcpCmd.IDLE
     while (peek(dut.io(n).S.Resp) != 1) {
-        // peek(dut.io(n).S.Data)
       step(1)
     }
     peek(dut.io(n).S.Data)

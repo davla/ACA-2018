@@ -12,10 +12,10 @@ import ocp._
 import patmos._
 import patmos.Constants._
 
-//Dirtybits class creates a dirty bit for each core at every addressable memory
-//location. These dirty bits are a fundemental part of our Load-Link
-//Store-Conditional protocol as they determine a cores permission to write
-//to a specific memory location.
+// Dirtybits module creates a dirty bit for each core at every addressable memory
+// location. These dirty bits are a fundemental part of our Load-Link
+// Store-Conditional protocol as they determine a cores permission to write
+// to a specific memory location.
 class DirtyBits (
     nrCores :Int,
     size :Int
