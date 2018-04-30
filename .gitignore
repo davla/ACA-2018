@@ -139,3 +139,4 @@ sympy-plots-for-*.tex/
 !*.qpf
 !*.qsf
 !*.sdc
+!patmos.sof
