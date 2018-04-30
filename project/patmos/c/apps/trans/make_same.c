@@ -34,8 +34,6 @@ void make_same(void* args) {
     unsigned int period = rand_r(&seed) & 0xFFFF;
     int my_value = (int) args;
 
-    *addr3 = 55;
-
     int value1 = *addr1;
     int value2 = *addr2;
 
@@ -67,7 +65,16 @@ int main() {
     corethread_join(1, (void**) &res);
     corethread_join(2, (void**) &res);
 
-    printf("%d = %d\n", *addr1, *addr2);
+    value1 = *addr1;
+    value2 = *addr2;
+
+    if (value1 == value2) {
+        printf("Success! Found: ");
+    }
+    else {
+        printf("Error! Found: ");
+    }
+    printf("%d = %d\n", value1, value2);
 
     return 0;
 }
