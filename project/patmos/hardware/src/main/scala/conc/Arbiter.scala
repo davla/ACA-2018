@@ -1,7 +1,7 @@
 /*
  * A local OCP arbiter with delay.
  *
- * Author: Davide Laezza - Roberts Fanning - Wenhao Li
+ * Authors: Davide Laezza - Roberts Fanning - Wenhao Li
  */
 
 package conc
