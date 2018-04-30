@@ -232,6 +232,11 @@ class Patmos(configFile: String, binFile: String, datFile: String) extends Modul
     for (i <- (0 until cores.length)) {
       spm.io(i) <> cores(i).io.comSpm
     }
+} else if (cmpDevice == 8) {
+    val spm = conc.SharedTransSpm(64, nrCores, 1024)
+    for (i <- (0 until cores.length)) {
+      spm.io(i) <> cores(i).io.comSpm
+    }
   }
   for (i <- (0 until cores.length)) {
     memarbiter.io.master(i) <> cores(i).io.memPort
