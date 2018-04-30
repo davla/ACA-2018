@@ -25,9 +25,6 @@
 // Whatever this contant means, it is needed
 const int NOC_MASTER = 0;
 
-// Timer pointer for random delay
-volatile _IODEV int* timer_ptr = (volatile _IODEV int *) (PATMOS_IO_TIMER+4);
-
 /*
     Shared scratchpad memory address, whatever the actual type.
     Needs to be a macro otherwise the compiler complains about addresses not
