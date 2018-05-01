@@ -58,13 +58,15 @@ void make_same(void* args) {
     // This increases the chances of a lost update occurring
     wait_period(period);
 
-    // If the argument is equal to the first value, setting the second
-    if (value1 == my_value) {
-        *addr2 = value1;
-    }
-    // If the argument is equal to the second value, setting the first
-    else if (value2 == my_value) {
-        *addr1 = value2;
+    if (value1 != value2) {
+        // If the argument is equal to the first value, setting the second
+        if (value1 == my_value) {
+            *addr2 = value1;
+        }
+        // If the argument is equal to the second value, setting the first
+        else if (value2 == my_value) {
+            *addr1 = value2;
+        }
     }
 
     // Returning success
