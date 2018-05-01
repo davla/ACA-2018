@@ -1,5 +1,10 @@
 # LL/SC + Transactional memory project
 
+## Files
+
+The hardware files are located in `patmos/hardware/src/main/scala/conc/`
+The test C programs are in `patmos/c/apps/llsc/` and `patmos/c/apps/trans`
+
 ## Utilities
 
 Patmos makefile system has been wrapped into `cmd.sh` to ease usage. The

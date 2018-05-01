@@ -23,14 +23,13 @@ class DirtyBits (
     import DirtyBits._
 
     /*
-      addr     : the address of the memory with the width of logarithm 2 of the size
-      core     : the core is encoded with the bits logarithm 2 of the core
+      addr     : the address of the memory location whose dirty bits are operated
+      core     : the core id whose dirty bit is dealt with
       wrEnable : write enable to allowing for the writing of the dirtybits
-      data     : the "data" is the input status of each dirty bit for the cores
-      coreBit  : the "coreBit" is the output status of each dirty bit for the cores
+      data     : data is the input status of a dirty bit for the core
+      coreBit  : coreBit is the output status of the dirty bit for the core
 
     */
-
     val io = new Bundle() {
         val addr = Bits(INPUT, log2Up(size))
         val core = Bits(INPUT, log2Up(nrCores))
@@ -49,18 +48,18 @@ class DirtyBits (
     // Read
     io.coreBit := coreBit
 
-    // Write: when the dirtybit write enable signal is high either of the
-    //        following can occur, either a dirty bit is written to pristine
+    // Write: when the dirtybit write enable signal is high one of the
+    //        following can occur: either a dirty bit is written to pristine
     //        on a read command, or all dirty bits are written to dirty on a
-    //        writie command.
+    //        write command.
     when (io.wrEnable) {
         switch (io.data) {
 
             // Making the bit for the core pristine
             // the mask is used for shift the pristine status bits to the
             // correseponding bit posintion e.g
-            // if io.core == b100 (log2up(4)) then
-            //    mask = shift left 2 position with 0
+            // if io.core == b100 (4) then
+            //    mask = shift left 4 position with 0
             is (PRISTINE) {
                 val mask = ~(UInt(1) << io.core)
                 location := location & mask
@@ -80,7 +79,7 @@ class DirtyBits (
 }
 
 /*
-* The scala thing static field and functions only can be seen in this file.
+* The scala thing static field and functions can be seen in this object.
 */
 //The DirtyBits values are specified with 0 indicating Pristine and 1 Dirty
 object DirtyBits {
@@ -149,28 +148,30 @@ class LLSCSpm(
     for (i <- 0 until BYTES_PER_WORD) {
         mem(i) = MemBlock(size / BYTES_PER_WORD, BYTE_WIDTH, bypass = false).io
     }
-    //A DirtyBits class is created with the number of cores and the number of
+    //A DirtyBits module is created with the number of cores and the number of
     //memory addresses being watched by a set of dirtybits.
     val dirtyBits = DirtyBits(nrCores, size / granularity)
 
-    //The values of the DirtyBits class are initialised.
-    //Address is shifted by the granularity since a set of DirtyBits covers,
+    //The inputs of the DirtyBits module are initialised.
+    //Address is shifted by the granularity since a set of DirtyBits covers
     //multiple memory locations.
     dirtyBits.io.addr := io.slave.M.Addr >> log2Up(granularity)
     dirtyBits.io.core := io.core // the cores are set.
-    dirtyBits.io.wrEnable := Bool(false) //write enable is false.
-    dirtyBits.io.data := Bits(0) //dirtybits are set to pristine.
+
+    // Default wires set not to write
+    dirtyBits.io.wrEnable := Bool(false)
+    dirtyBits.io.data := Bits(0)
 
     /* check of dirtry bits status:
-    if the dirty bit status of memory is prestine then return ture
+    if the dirty bit status of memory is prestine then return true
     else return false
     */
 
     val isPristine = dirtyBits.io.coreBit === PRISTINE
 
-    /* To check whether can write to the memory
-    if OcpCmd is write command and the dirty bit status of memory is prestine
-    then return true else return false
+    /*
+        Should only write if the write command is received and the dirty bit
+        of the current core is pristine.
     */
     val shouldWrite = io.slave.M.Cmd === OcpCmd.WR && isPristine
 
@@ -180,8 +181,8 @@ class LLSCSpm(
 
     // store conditional
     /*
-       To perform the store conditional with checking should the address is
-       allowed to be written
+        Setting the mask to 0 also when the write is not alowed by
+        LL/SC protocol.
     */
     val stmsk = Mux(shouldWrite, io.slave.M.ByteEn, Bits(0))
     for (i <- 0 until BYTES_PER_WORD) {
@@ -212,7 +213,7 @@ class LLSCSpm(
             dirtyBits.io.wrEnable := Bool(true)
             dirtyBits.io.data := PRISTINE
         }
-        //When a core attempts a write command we must first check if that cores
+        //When a core attempts a write command we must first check if that core's
         //dirty bit is still pristine meaning that no other cores have written
         //to that address. If that condition is satisfied write enable is set to
         //true to allow for all cores dirtybits to be set to dirty using DIRTY.
