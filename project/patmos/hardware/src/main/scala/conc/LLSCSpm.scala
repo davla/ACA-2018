@@ -124,6 +124,10 @@ class LLSCSpm(
         sys.error (s"LLSCSpm: granularity must be a power of 2, but $granularity was provided.")
     }
 
+    if (granularity < 4) {
+        sys.error (s"LLSCSpm: granularity must be at least 4, but $granularity was provided.")
+    }
+
     if (!isPow2 (size)) {
         sys.error (s"LLSCSpm: size must be a power of 2, but $size was provided.")
     }
