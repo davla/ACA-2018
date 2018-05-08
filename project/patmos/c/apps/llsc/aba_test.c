@@ -33,6 +33,7 @@ const int NOC_MASTER = 0;
 #define SHARED_SPM (0xE8000000)
 volatile _SPM int* shared_addr = (volatile _SPM int *) (SHARED_SPM + 32);
 volatile _SPM int* sync_addr = (volatile _SPM int *) (SHARED_SPM + 64);
+volatile _SPM int* result_addr = (volatile _SPM int *) (SHARED_SPM + 1024);
 
 /*
     This function writes A_VAL in the shared address, signals that to the
@@ -57,9 +58,10 @@ void victim(void* args) {
     /*
         At the shared address there should still be A_VAL, meaning that even
         though the value is the same, the location has been written to, and
-        therefore the last write failed.
+        therefore the last write failed. So, it the write was successful or
+        the value is not A_VAL, then the test fails
     */
-    if (*shared_addr != A_VAL) {
+    if (*result_addr == 0 || *shared_addr != A_VAL) {
         printf("Test failed\n");
     }
     else {

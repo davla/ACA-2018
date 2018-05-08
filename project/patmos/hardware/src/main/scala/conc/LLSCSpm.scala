@@ -114,6 +114,8 @@ class LLSCSpm(
     val granularity :Int,
     nrCores: Int,           //number of cores
     size: Int,               //size of each core memory
+    //whether to send the store conditional results on data as response for the
+    //write ot=r to store it in a register for later read
     resultOnData :Boolean = false
 ) extends Module {
     import DirtyBits._
@@ -124,6 +126,7 @@ class LLSCSpm(
         sys.error (s"LLSCSpm: granularity must be a power of 2, but $granularity was provided.")
     }
 
+    //Sub-word write has not been implemented in DirtyBits
     if (granularity < 4) {
         sys.error (s"LLSCSpm: granularity must be at least 4, but $granularity was provided.")
     }
@@ -145,6 +148,8 @@ class LLSCSpm(
         val core = UInt(INPUT, log2Up(nrCores))
     }
 
+    // The address of the result register, if not sending
+    // the result when writing
     val resultRegAddr = UInt(size)
 
     //binary value of the SPM address
@@ -185,6 +190,10 @@ class LLSCSpm(
     /* To connect with the Ocp slave */
     val cmdReg = Reg(next = io.slave.M.Cmd)
 
+    // If the result is sent when writing, the result register should
+    // be as wide as the data wires in the OCP port.
+    // Otherwise, it contains a bit for every core, with the result of
+    // the last store conditional
     val resultReg = if (resultOnData)
             RegInit(io.slave.M.Data)
         else
@@ -210,19 +219,21 @@ class LLSCSpm(
     io.slave.S.Resp := Mux(cmdReg === OcpCmd.WR || cmdReg === OcpCmd.RD,
         OcpResp.DVA, OcpResp.NULL)
 
+    // Whether the read command is to read the result of a store conditional,
+    // instead of a memory cell
     val readResult = io.slave.M.Addr === resultRegAddr
     if (resultOnData) {
-        /* slave data
-        mutilplexed by Ocp read
-        if the command is read holds then rdData, else dataReg
-        */
+        // When sending the results on OCP data wires, the data should come
+        // from the memory on read commands and from the result register
+        // on writes
         io.slave.S.Data := Mux(cmdReg === OcpCmd.RD, rdData, resultReg)
     }
     else {
+        // When sending the results on OCP data wires, the data should come
+        // from the memory on read commands and from the result register
+        // on writes
         io.slave.S.Data := Mux(readResult, (resultReg >> io.core)(0), rdData)
     }
-
-
 
     switch (io.slave.M.Cmd) {
       //For a read command write enable is set to true and then the dirty bit
@@ -230,9 +241,22 @@ class LLSCSpm(
       //command. No conditions need to be checked since a read command is
       //always possible
         is (OcpCmd.RD) {
-            when (~readResult) {
+
+            // When sending the results on OCP data wires, every read command
+            // is to the memory, so the dirty bits need to be updated
+            if (resultOnData) {
                 dirtyBits.io.wrEnable := Bool(true)
                 dirtyBits.io.data := PRISTINE
+            }
+
+            // When the result is stored in a register for later reading,
+            // the dirty bits only need to be updated when not reading the
+            // result register
+            else {
+                when (~readResult) {
+                    dirtyBits.io.wrEnable := Bool(true)
+                    dirtyBits.io.data := PRISTINE
+                }
             }
         }
         //When a core attempts a write command we must first check if that core's
@@ -245,6 +269,10 @@ class LLSCSpm(
                 dirtyBits.io.wrEnable := Bool(true)
                 dirtyBits.io.data := DIRTY
 
+                // When the store conditional result is returned on OCP data
+                // wires, writing to the result in the result register.
+                // Otherwise, the corresponding bit in the result register is
+                // set for later reading
                 if (resultOnData) {
                     resultReg := Result.SUCCESS
                 }
@@ -252,6 +280,11 @@ class LLSCSpm(
                     resultReg := resultReg & ~(UInt(1) << io.core)
                 }
             }.otherwise {
+
+                // When the store conditional result is returned on OCP data
+                // wires, writing to the result in the result register.
+                // Otherwise, the corresponding bit in the result register is
+                // reset for later reading
                 if (resultOnData) {
                     resultReg := Result.FAIL
                 }
@@ -291,6 +324,8 @@ class LLSCSpmTester(dut: LLSCSpm, resultOnData :Boolean = false) extends Tester(
     dut.io.slave.S.Data
   }
 
+  // This is the write for when the results have to be read from
+  // the result register
   def writeNoResult(addr: Int, data: Int) = {
     poke(dut.io.slave.M.Addr, addr)
     poke(dut.io.slave.M.Data, data)
@@ -304,6 +339,7 @@ class LLSCSpmTester(dut: LLSCSpm, resultOnData :Boolean = false) extends Tester(
     read(SIZE)
   }
 
+  // This is the write for when the results are returned on the data wires
   def writeResult(addr: Int, data: Int) = {
     poke(dut.io.slave.M.Addr, addr)
     poke(dut.io.slave.M.Data, data)
@@ -318,6 +354,7 @@ class LLSCSpmTester(dut: LLSCSpm, resultOnData :Boolean = false) extends Tester(
     dut.io.slave.S.Data
   }
 
+  // Choosing the right write based on the parameter
   val write = if (resultOnData) writeResult _ else writeNoResult _
 
   poke(dut.io.core, 0)
@@ -401,12 +438,15 @@ object LLSCSpmTester {
     val SIZE = 1024
 
     def main(args: Array[String]): Unit = {
+
+        // Write result has to be read from the result register
         chiselMainTest(Array("--genHarness", "--test", "--backend", "c",
                 "--compile", "--vcd", "--targetDir", "generated"),
             () => LLSCSpm(GRANULARITY, 4, SIZE)) {
                 c => new LLSCSpmTester(c)
         }
 
+        // Write result is returned on data wires
         chiselMainTest(Array("--genHarness", "--test", "--backend", "c",
                 "--compile", "--vcd", "--targetDir", "generated"),
             () => LLSCSpm(GRANULARITY, 4, SIZE, true)) {
