@@ -113,7 +113,8 @@ class LLSCSpm(
     //a word, a double word etc.
     val granularity :Int,
     nrCores: Int,           //number of cores
-    size: Int               //size of each core memory
+    size: Int,               //size of each core memory
+    resultOnData :Boolean = false
 ) extends Module {
     import DirtyBits._
     import LLSCSpm._
@@ -139,6 +140,8 @@ class LLSCSpm(
         val slave = new OcpCoreSlavePort(ADDR_WIDTH, DATA_WIDTH)
         val core = UInt(INPUT, log2Up(nrCores))
     }
+
+    val resultRegAddr = UInt(size)
 
     //binary value of the SPM address
     val addrBits = log2Up(size / BYTES_PER_WORD)
@@ -177,7 +180,11 @@ class LLSCSpm(
 
     /* To connect with the Ocp slave */
     val cmdReg = Reg(next = io.slave.M.Cmd)
-    val dataReg = RegInit(io.slave.M.Data)
+
+    val resultReg = if (resultOnData)
+            RegInit(io.slave.M.Data)
+        else
+            RegInit(UInt(0, width = nrCores))
 
     // store conditional
     /*
@@ -198,11 +205,20 @@ class LLSCSpm(
     */
     io.slave.S.Resp := Mux(cmdReg === OcpCmd.WR || cmdReg === OcpCmd.RD,
         OcpResp.DVA, OcpResp.NULL)
-    /* slave data
-       mutilplexed by Ocp read
-       if the command is read holds then rdData, else dataReg
-    */
-    io.slave.S.Data := Mux(cmdReg === OcpCmd.RD, rdData, dataReg)
+
+    val readResult = io.slave.M.Addr === resultRegAddr
+    if (resultOnData) {
+        /* slave data
+        mutilplexed by Ocp read
+        if the command is read holds then rdData, else dataReg
+        */
+        io.slave.S.Data := Mux(cmdReg === OcpCmd.RD, rdData, resultReg)
+    }
+    else {
+        io.slave.S.Data := Mux(readResult, (resultReg >> io.core)(0), rdData)
+    }
+
+
 
     switch (io.slave.M.Cmd) {
       //For a read command write enable is set to true and then the dirty bit
@@ -210,8 +226,10 @@ class LLSCSpm(
       //command. No conditions need to be checked since a read command is
       //always possible
         is (OcpCmd.RD) {
-            dirtyBits.io.wrEnable := Bool(true)
-            dirtyBits.io.data := PRISTINE
+            when (~readResult) {
+                dirtyBits.io.wrEnable := Bool(true)
+                dirtyBits.io.data := PRISTINE
+            }
         }
         //When a core attempts a write command we must first check if that core's
         //dirty bit is still pristine meaning that no other cores have written
@@ -223,9 +241,19 @@ class LLSCSpm(
                 dirtyBits.io.wrEnable := Bool(true)
                 dirtyBits.io.data := DIRTY
 
-                dataReg := Result.SUCCESS
+                if (resultOnData) {
+                    resultReg := Result.SUCCESS
+                }
+                else {
+                    resultReg := resultReg & ~(UInt(1) << io.core)
+                }
             }.otherwise {
-                dataReg := Result.FAIL
+                if (resultOnData) {
+                    resultReg := Result.FAIL
+                }
+                else {
+                    resultReg := resultReg | UInt(1) << io.core
+                }
             }
         }
     }
@@ -233,16 +261,16 @@ class LLSCSpm(
 
 object LLSCSpm {
     object Result {
-        val SUCCESS = Bits(0)
-        val FAIL = Bits(1)
+        val SUCCESS = UInt(0)
+        val FAIL = UInt(1)
     }
 
-    def apply(granularity :Int, nrCores: Int, size: Int) = {
-        Module(new LLSCSpm(granularity, nrCores, size))
+    def apply(granularity :Int, nrCores: Int, size: Int, resultOnData :Boolean = false) = {
+        Module(new LLSCSpm(granularity, nrCores, size, resultOnData))
     }
 }
 
-class LLSCSpmTester(dut: LLSCSpm) extends Tester(dut) {
+class LLSCSpmTester(dut: LLSCSpm, resultOnData :Boolean = false) extends Tester(dut) {
     import LLSCSpmTester._
 
   println("LL/SC SPM Tester")
@@ -259,7 +287,20 @@ class LLSCSpmTester(dut: LLSCSpm) extends Tester(dut) {
     dut.io.slave.S.Data
   }
 
-  def write(addr: Int, data: Int) = {
+  def writeNoResult(addr: Int, data: Int) = {
+    poke(dut.io.slave.M.Addr, addr)
+    poke(dut.io.slave.M.Data, data)
+    poke(dut.io.slave.M.Cmd, 1) // OcpCmd.WR
+    poke(dut.io.slave.M.ByteEn, 0x0f)
+    step(1)
+    poke(dut.io.slave.M.Cmd, 0) // OcpCmd.IDLE
+    while (peek(dut.io.slave.S.Resp) != 1) {
+      step(1)
+    }
+    read(SIZE)
+  }
+
+  def writeResult(addr: Int, data: Int) = {
     poke(dut.io.slave.M.Addr, addr)
     poke(dut.io.slave.M.Data, data)
     poke(dut.io.slave.M.Cmd, 1) // OcpCmd.WR
@@ -272,6 +313,8 @@ class LLSCSpmTester(dut: LLSCSpm) extends Tester(dut) {
     peek(dut.io.slave.S.Data)
     dut.io.slave.S.Data
   }
+
+  val write = if (resultOnData) writeResult _ else writeNoResult _
 
   poke(dut.io.core, 0)
 
@@ -351,12 +394,19 @@ class LLSCSpmTester(dut: LLSCSpm) extends Tester(dut) {
 
 object LLSCSpmTester {
     val GRANULARITY = 32
+    val SIZE = 1024
 
-  def main(args: Array[String]): Unit = {
-    chiselMainTest(Array("--genHarness", "--test", "--backend", "c",
-      "--compile", "--vcd", "--targetDir", "generated"),
-      () => LLSCSpm(GRANULARITY, 4, 1024)) {
-        c => new LLSCSpmTester(c)
-      }
-  }
+    def main(args: Array[String]): Unit = {
+        chiselMainTest(Array("--genHarness", "--test", "--backend", "c",
+                "--compile", "--vcd", "--targetDir", "generated"),
+            () => LLSCSpm(GRANULARITY, 4, SIZE)) {
+                c => new LLSCSpmTester(c)
+        }
+
+        chiselMainTest(Array("--genHarness", "--test", "--backend", "c",
+                "--compile", "--vcd", "--targetDir", "generated"),
+            () => LLSCSpm(GRANULARITY, 4, SIZE, true)) {
+                c => new LLSCSpmTester(c, true)
+        }
+    }
 }
